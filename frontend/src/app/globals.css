@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  HALLMARK v2 STAMP
+  theme: academic-cobalt (editorial / academic)
+  floor: tokens, interaction-safety, no-ai-slop, job-driven
+*/
+
+:root {
+  --color-paper: #fbfaf8;
+  --color-paper-card: #ffffff;
+  --color-paper-muted: #f3f1ea;
+  --color-ink: #191816;
+  --color-ink-muted: #686661;
+  --color-rule: #e3dfd5;
+  --color-rule-strong: #c9c4b7;
+  
+  --color-accent: #1e40af;
+  --color-accent-hover: #1e3a8a;
+  --color-accent-soft: #eef2ff;
+  --color-accent-ink: #ffffff;
+  --color-focus: #2563eb;
+
+  --color-success: #166534;
+  --color-success-soft: #f0fdf4;
+  --color-warning: #854d0e;
+  --color-warning-soft: #fefce8;
+  --color-danger: #991b1b;
+  --color-danger-soft: #fef2f2;
+
+  --radius-card: 6px;
+  --radius-btn: 6px;
+  --radius-pill: 9999px;
+  
+  --rule-hair: 1px;
+}
+
+html,
+body {
+  overflow-x: clip;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Floor: Every interactive element has instant focus-visible */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Floor: Safe interaction transitions (never transition: all) */
+button,
+a,
+input,
+select {
+  transition-property: color, background-color, border-color, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
