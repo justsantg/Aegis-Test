@@ -1,0 +1,11 @@
+export enum CourseModalityEnum {
+  REGULAR_GROUP = 'REGULAR_GROUP',
+  PERSONALIZED_1ON1 = 'PERSONALIZED_1ON1',
+  SEMI_PERSONALIZED = 'SEMI_PERSONALIZED',
+}
+
+export enum EnrollmentStatusEnum {
+  ACTIVE = 'ACTIVE',
+  DROPPED = 'DROPPED',
+  COMPLETED = 'COMPLETED',
+}
