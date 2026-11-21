@@ -70,10 +70,10 @@ export default registerAs<AppConfig>('app', () => {
       .split(',')
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0),
-    port: process.env.APP_PORT
-      ? parseInt(process.env.APP_PORT, 10)
-      : process.env.PORT
-        ? parseInt(process.env.PORT, 10)
+    port: process.env.PORT
+      ? parseInt(process.env.PORT, 10)
+      : process.env.APP_PORT
+        ? parseInt(process.env.APP_PORT, 10)
         : 3000,
     apiPrefix: process.env.API_PREFIX || 'api',
     fallbackLanguage: process.env.APP_FALLBACK_LANGUAGE || 'en',
