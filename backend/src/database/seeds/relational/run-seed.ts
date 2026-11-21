@@ -23,6 +23,10 @@ const runSeed = async () => {
   await app.get(ExamSeedService).run();
 
   await app.close();
+  process.exit(0);
 };
 
-void runSeed();
+void runSeed().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
