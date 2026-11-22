@@ -216,6 +216,15 @@ export interface CreateTeacherPayload {
   phoneNumber?: string;
 }
 
+export interface StudentRegisterPayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  phoneNumber?: string;
+  studentCode?: string;
+}
+
 export interface CreateCoursePayload {
   levelId: number;
   teacherId?: number;
@@ -464,6 +473,13 @@ export const api = {
 
   async login(payload: { email: string; password: string }): Promise<LoginResponse> {
     return request<LoginResponse>('/auth/email/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async studentRegister(payload: StudentRegisterPayload): Promise<LoginResponse> {
+    return request<LoginResponse>('/auth/student/register', {
       method: 'POST',
       body: JSON.stringify(payload),
     });

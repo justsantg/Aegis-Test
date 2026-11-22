@@ -45,4 +45,12 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsOptional()
   @Type(() => StatusDto)
   status?: StatusDto;
+
+  @ApiPropertyOptional({ example: '+57 300 123 4567', type: String })
+  @IsOptional()
+  phoneNumber?: string | null;
+
+  @ApiPropertyOptional({ example: 'EST-2026-001', type: String })
+  @IsOptional()
+  studentCode?: string | null;
 }

@@ -15,6 +15,7 @@ import { AuthUpdateDto } from './dto/auth-update.dto';
 import { AuthProvidersEnum } from './auth-providers.enum';
 import { SocialInterface } from '../social/interfaces/social.interface';
 import { AuthRegisterLoginDto } from './dto/auth-register-login.dto';
+import { AuthStudentRegisterDto } from './dto/auth-student-register.dto';
 import { NullableType } from '../utils/types/nullable.type';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { ConfigService } from '@nestjs/config';
@@ -229,6 +230,74 @@ export class AuthService {
         hash,
       },
     });
+  }
+
+  async registerStudent(
+    dto: AuthStudentRegisterDto,
+  ): Promise<LoginResponseDto> {
+    const existingUser = await this.usersService.findByEmail(dto.email);
+    if (existingUser) {
+      throw new UnprocessableEntityException({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        errors: {
+          email: 'emailAlreadyExists',
+        },
+      });
+    }
+
+    const studentCode =
+      dto.studentCode?.trim() ||
+      `EST-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const createdUser = await this.usersService.create({
+      email: dto.email,
+      password: dto.password,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      phoneNumber: dto.phoneNumber ?? null,
+      studentCode,
+      role: {
+        id: RoleEnum.student,
+      },
+      status: {
+        id: StatusEnum.active,
+      },
+      provider: AuthProvidersEnum.email,
+    });
+
+    const user = await this.usersService.findById(createdUser.id);
+    if (!user) {
+      throw new UnprocessableEntityException({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        errors: {
+          user: 'userNotFound',
+        },
+      });
+    }
+
+    const hash = crypto
+      .createHash('sha256')
+      .update(randomStringGenerator())
+      .digest('hex');
+
+    const session = await this.sessionService.create({
+      user,
+      hash,
+    });
+
+    const { token, refreshToken, tokenExpires } = await this.getTokensData({
+      id: user.id,
+      role: user.role,
+      sessionId: session.id,
+      hash,
+    });
+
+    return {
+      refreshToken,
+      token,
+      tokenExpires,
+      user,
+    };
   }
 
   async confirmEmail(hash: string): Promise<void> {
