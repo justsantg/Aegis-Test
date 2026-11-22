@@ -255,6 +255,88 @@ export interface StudentRegisterPayload {
   studentCode?: string;
 }
 
+export interface StudentExamRecordItem {
+  hasExam: boolean;
+  isAptis?: boolean;
+  attended: boolean;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'ABSENT' | 'APTIS_OFFICIAL';
+  score: number | null;
+  submittedAt: string | null;
+  sessionId: string | null;
+  sessionPin: string | null;
+  examTitle: string;
+  focusLossCount: number;
+  isMakeup: boolean;
+  note?: string | null;
+}
+
+export interface PhaseRecord {
+  levelId: number;
+  code: string;
+  name: string;
+  levelType: 'REGULAR' | 'TRAINING_APTIS';
+  hasFinalExam: boolean;
+  orderIndex: number;
+  isCurrentLevel: boolean;
+  phaseStatus: 'COMPLETED' | 'IN_PROGRESS' | 'PENDING';
+  phaseAverage: number | null;
+  midterm: StudentExamRecordItem;
+  final: StudentExamRecordItem;
+}
+
+export interface StudentAcademicRecordResponse {
+  student: {
+    id: number;
+    firstName?: string;
+    lastName?: string;
+    fullName: string;
+    email: string;
+    phoneNumber?: string;
+    studentCode?: string;
+  };
+  currentCourse: {
+    enrollmentId: string;
+    courseId: string;
+    courseName: string;
+    courseModality: string;
+    scheduleDays: string[];
+    startTime?: string;
+    endTime?: string;
+    classroom?: string;
+    level?: Level | null;
+    teacher?: {
+      id: number;
+      fullName: string;
+      email: string;
+    } | null;
+  } | null;
+  enrolledCourses: Array<{
+    enrollmentId: string;
+    courseId: string;
+    courseName: string;
+    courseModality: string;
+    scheduleDays: string[];
+    startTime?: string;
+    endTime?: string;
+    classroom?: string;
+    level?: Level | null;
+    teacher?: {
+      id: number;
+      fullName: string;
+      email: string;
+    } | null;
+  }>;
+  summary: {
+    currentLevelCode: string | null;
+    currentLevelName: string;
+    totalExamsTaken: number;
+    generalAverage: number | null;
+    completedPhasesCount: number;
+    totalPhases: number;
+  };
+  phases: PhaseRecord[];
+}
+
 export interface CreateCoursePayload {
   levelId: number;
   teacherId?: number;
@@ -580,5 +662,9 @@ export const api = {
     if (filters?.courseId) params.append('courseId', filters.courseId);
     const q = params.toString() ? `?${params.toString()}` : '';
     return request<TeacherAuditMetricsResponse>(`/sessions/teacher-metrics${q}`);
+  },
+
+  async getStudentAcademicRecord(studentId: number): Promise<StudentAcademicRecordResponse> {
+    return request<StudentAcademicRecordResponse>(`/sessions/student/${studentId}/academic-record`);
   },
 };

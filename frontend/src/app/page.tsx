@@ -92,7 +92,7 @@ export default function LoginPage() {
       } else if (res.user.role.id === 2) {
         router.push('/teacher');
       } else if (res.user.role.id === 3) {
-        router.push('/exam/join');
+        router.push('/student');
       } else {
         router.push('/admin');
       }

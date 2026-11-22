@@ -58,7 +58,7 @@ export default function ExamResultPage() {
   const handleFinish = () => {
     sessionStorage.removeItem('active_exam_session');
     sessionStorage.removeItem('exam_result');
-    router.push('/');
+    router.push('/student');
   };
 
   return (

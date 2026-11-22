@@ -48,6 +48,11 @@ export class ExamSessionsController {
     return this.sessionsService.joinSession(dto);
   }
 
+  @Get('student/:studentId/academic-record')
+  async getStudentAcademicRecord(@Param('studentId') studentId: string) {
+    return this.sessionsService.getStudentAcademicRecord(Number(studentId));
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.sessionsService.findOne(id);

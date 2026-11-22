@@ -11,6 +11,7 @@ import { UserEntity } from '../users/infrastructure/persistence/relational/entit
 import { RoleEntity } from '../roles/infrastructure/persistence/relational/entities/role.entity';
 import { StatusEntity } from '../statuses/infrastructure/persistence/relational/entities/status.entity';
 import { FileEntity } from '../files/infrastructure/persistence/relational/entities/file.entity';
+import { LevelEntity } from '../levels/infrastructure/persistence/relational/entities/level.entity';
 import { ExamsModule } from '../exams/exams.module';
 import { ExamSessionsService } from './exam-sessions.service';
 import { ExamSessionsController } from './exam-sessions.controller';
@@ -29,6 +30,7 @@ import { ExamSessionsController } from './exam-sessions.controller';
       RoleEntity,
       StatusEntity,
       FileEntity,
+      LevelEntity,
     ]),
     ExamsModule,
   ],

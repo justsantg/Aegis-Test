@@ -100,9 +100,9 @@ export default function RegisterPage() {
       localStorage.setItem('cambridge_token', res.token);
       localStorage.setItem('cambridge_user', JSON.stringify(res.user));
 
-      // Immediately redirect to student exam portal
+      // Immediately redirect to student portal
       setTimeout(() => {
-        router.push('/exam/join');
+        router.push('/student');
       }, 1000);
     } catch (err: any) {
       setError(err.message || 'Error al registrar estudiante. Verifica los datos ingresados.');

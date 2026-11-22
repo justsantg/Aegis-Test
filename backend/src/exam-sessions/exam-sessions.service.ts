@@ -13,6 +13,8 @@ import { CourseEntity } from '../courses/infrastructure/persistence/relational/e
 import { CourseEnrollmentEntity } from '../courses/infrastructure/persistence/relational/entities/course-enrollment.entity';
 import { ExamTemplateEntity } from '../exams/infrastructure/persistence/relational/entities/exam-template.entity';
 import { UserEntity } from '../users/infrastructure/persistence/relational/entities/user.entity';
+import { LevelEntity } from '../levels/infrastructure/persistence/relational/entities/level.entity';
+import { LevelTypeEnum } from '../levels/levels.enum';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { JoinSessionDto } from './dto/join-session.dto';
 import { SubmitExamDto } from './dto/submit-exam.dto';
@@ -44,6 +46,8 @@ export class ExamSessionsService {
     private readonly templateRepository: Repository<ExamTemplateEntity>,
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
+    @InjectRepository(LevelEntity)
+    private readonly levelRepository: Repository<LevelEntity>,
     private readonly examsService: ExamsService,
   ) {}
 
@@ -701,6 +705,272 @@ export class ExamSessionsService {
             : null,
       },
       sessions: list,
+    };
+  }
+
+  async getStudentAcademicRecord(studentId: number) {
+    const student = await this.userRepository.findOne({
+      where: { id: studentId },
+      relations: ['role'],
+    });
+
+    if (!student) {
+      throw new NotFoundException(`Student with id ${studentId} not found`);
+    }
+
+    // 1. Obtener cursos en los que está inscrito el estudiante
+    const enrollments = await this.enrollmentRepository.find({
+      where: { student: { id: studentId } },
+      relations: ['course', 'course.level', 'course.teacher'],
+      order: { createdAt: 'DESC' },
+    });
+
+    const activeEnrollments = enrollments.map((e) => ({
+      enrollmentId: e.id,
+      courseId: e.course?.id,
+      courseName: e.course?.courseName,
+      courseModality: e.course?.courseModality,
+      scheduleDays: e.course?.scheduleDays || [],
+      startTime: e.course?.startTime,
+      endTime: e.course?.endTime,
+      classroom: e.course?.classroom,
+      level: e.course?.level
+        ? {
+            id: e.course.level.id,
+            code: e.course.level.code,
+            name: e.course.level.name,
+            levelType: e.course.level.levelType,
+            hasFinalExam: e.course.level.hasFinalExam,
+            orderIndex: e.course.level.orderIndex,
+          }
+        : null,
+      teacher: e.course?.teacher
+        ? {
+            id: e.course.teacher.id,
+            fullName:
+              `${e.course.teacher.firstName || ''} ${e.course.teacher.lastName || ''}`.trim() ||
+              e.course.teacher.email,
+            email: e.course.teacher.email,
+          }
+        : null,
+    }));
+
+    const primaryCourse = activeEnrollments[0] || null;
+    const currentLevel = primaryCourse?.level || null;
+
+    // 2. Obtener todas las 21 fases del programa oficial ordenadas por orden académico
+    const allLevels = await this.levelRepository.find({
+      order: { orderIndex: 'ASC' },
+    });
+
+    // 3. Obtener registros de asistencia / exámenes presentados por el estudiante
+    const attendees = await this.attendeeRepository.find({
+      where: { student: { id: studentId } },
+      relations: [
+        'session',
+        'session.course',
+        'session.course.level',
+        'session.examTemplate',
+        'session.examTemplate.level',
+        'session.teacher',
+      ],
+      order: { createdAt: 'DESC' },
+    });
+
+    // 4. Mapear cada una de las 21 fases con sus reactivos Midterm y Final
+    const phases = allLevels.map((lvl) => {
+      // Coincidencia por id o por código de nivel
+      const matchingAttendees = attendees.filter((a) => {
+        const tLevelId = a.session?.examTemplate?.level?.id;
+        const cLevelId = a.session?.course?.level?.id;
+        const tLevelCode = a.session?.examTemplate?.level?.code;
+        const cLevelCode = a.session?.course?.level?.code;
+
+        return (
+          tLevelId === lvl.id ||
+          cLevelId === lvl.id ||
+          (tLevelCode && tLevelCode === lvl.code) ||
+          (cLevelCode && cLevelCode === lvl.code)
+        );
+      });
+
+      const midtermRecord = matchingAttendees.find(
+        (a) => a.session?.examTemplate?.examType === 'MIDTERM',
+      );
+
+      const finalRecord = matchingAttendees.find(
+        (a) => a.session?.examTemplate?.examType === 'FINAL',
+      );
+
+      const isTraining =
+        lvl.levelType === LevelTypeEnum.TRAINING_APTIS ||
+        lvl.code === 'TRAINING' ||
+        !lvl.hasFinalExam;
+
+      const midterm = {
+        hasExam: true,
+        attended: !!midtermRecord,
+        status: midtermRecord
+          ? midtermRecord.attendanceStatus
+          : AttendanceStatusEnum.PENDING,
+        score:
+          midtermRecord?.totalScore != null
+            ? Number(midtermRecord.totalScore)
+            : null,
+        submittedAt: midtermRecord?.submittedAt || null,
+        sessionId: midtermRecord?.session?.id || null,
+        sessionPin: midtermRecord?.session?.sessionPin || null,
+        examTitle:
+          midtermRecord?.session?.examTemplate?.title ||
+          `Examen Intermedio - ${lvl.name}`,
+        focusLossCount: midtermRecord?.focusLossCount || 0,
+        isMakeup: midtermRecord?.isMakeup || false,
+      };
+
+      const finalExam = isTraining
+        ? {
+            hasExam: false,
+            isAptis: true,
+            attended: false,
+            status: 'APTIS_OFFICIAL',
+            score: null,
+            submittedAt: null,
+            sessionId: null,
+            sessionPin: null,
+            examTitle: 'Examen Oficial Internacional APTIS (British Council)',
+            focusLossCount: 0,
+            isMakeup: false,
+            note: 'Esta fase culmina con la presentación del examen oficial APTIS para certificación internacional.',
+          }
+        : {
+            hasExam: true,
+            isAptis: false,
+            attended: !!finalRecord,
+            status: finalRecord
+              ? finalRecord.attendanceStatus
+              : AttendanceStatusEnum.PENDING,
+            score:
+              finalRecord?.totalScore != null
+                ? Number(finalRecord.totalScore)
+                : null,
+            submittedAt: finalRecord?.submittedAt || null,
+            sessionId: finalRecord?.session?.id || null,
+            sessionPin: finalRecord?.session?.sessionPin || null,
+            examTitle:
+              finalRecord?.session?.examTemplate?.title ||
+              `Examen Final - ${lvl.name}`,
+            focusLossCount: finalRecord?.focusLossCount || 0,
+            isMakeup: finalRecord?.isMakeup || false,
+            note: null,
+          };
+
+      // Cálculo de promedio de fase
+      const validScores: number[] = [];
+      if (midterm.score !== null) validScores.push(midterm.score);
+      if (finalExam.hasExam && finalExam.score !== null)
+        validScores.push(finalExam.score);
+
+      const phaseAverage =
+        validScores.length > 0
+          ? Number(
+              (
+                validScores.reduce((acc, curr) => acc + curr, 0) /
+                validScores.length
+              ).toFixed(2),
+            )
+          : null;
+
+      const isCurrentLevel =
+        activeEnrollments.some(
+          (e) => e.level?.id === lvl.id || e.level?.code === lvl.code,
+        ) || false;
+
+      // Determinación de estado de fase
+      let phaseStatus: 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' = 'PENDING';
+      if (isTraining) {
+        if (
+          midterm.status === AttendanceStatusEnum.COMPLETED &&
+          (midterm.score ?? 0) >= 3.0
+        ) {
+          phaseStatus = 'COMPLETED';
+        } else if (isCurrentLevel || midterm.attended) {
+          phaseStatus = 'IN_PROGRESS';
+        }
+      } else {
+        if (
+          midterm.status === AttendanceStatusEnum.COMPLETED &&
+          finalExam.status === AttendanceStatusEnum.COMPLETED &&
+          (phaseAverage ?? 0) >= 3.0
+        ) {
+          phaseStatus = 'COMPLETED';
+        } else if (
+          isCurrentLevel ||
+          midterm.attended ||
+          finalExam.attended
+        ) {
+          phaseStatus = 'IN_PROGRESS';
+        }
+      }
+
+      return {
+        levelId: lvl.id,
+        code: lvl.code,
+        name: lvl.name,
+        levelType: lvl.levelType,
+        hasFinalExam: lvl.hasFinalExam,
+        orderIndex: lvl.orderIndex,
+        isCurrentLevel,
+        phaseStatus,
+        phaseAverage,
+        midterm,
+        final: finalExam,
+      };
+    });
+
+    // 5. Resumen general
+    const completedExams = attendees.filter(
+      (a) =>
+        a.attendanceStatus === AttendanceStatusEnum.COMPLETED &&
+        a.totalScore != null,
+    );
+    const allExamScores = completedExams.map((a) => Number(a.totalScore));
+    const generalAverage =
+      allExamScores.length > 0
+        ? Number(
+            (
+              allExamScores.reduce((acc, curr) => acc + curr, 0) /
+              allExamScores.length
+            ).toFixed(2),
+          )
+        : null;
+
+    const completedPhasesCount = phases.filter(
+      (p) => p.phaseStatus === 'COMPLETED',
+    ).length;
+
+    return {
+      student: {
+        id: student.id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        fullName:
+          `${student.firstName || ''} ${student.lastName || ''}`.trim() ||
+          student.email,
+        email: student.email,
+        phoneNumber: student.phoneNumber,
+        studentCode: student.studentCode,
+      },
+      currentCourse: primaryCourse,
+      enrolledCourses: activeEnrollments,
+      summary: {
+        currentLevelCode: currentLevel?.code || null,
+        currentLevelName: currentLevel?.name || 'Sin fase activa asignada',
+        totalExamsTaken: completedExams.length,
+        generalAverage,
+        completedPhasesCount,
+        totalPhases: allLevels.length,
+      },
+      phases,
     };
   }
 }

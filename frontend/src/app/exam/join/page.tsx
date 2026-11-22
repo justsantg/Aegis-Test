@@ -163,6 +163,14 @@ export default function JoinExamPage() {
             <ArrowLeft className="w-3.5 h-3.5 mr-1" />
             Volver al Panel Docente
           </Link>
+        ) : currentUser?.role?.id === 3 ? (
+          <Link
+            href="/student"
+            className="inline-flex items-center text-xs text-accent hover:underline font-semibold"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+            Volver a Mi Portal de Estudiante
+          </Link>
         ) : (
           <Link
             href="/"
