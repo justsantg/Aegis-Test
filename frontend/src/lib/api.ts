@@ -133,6 +133,13 @@ export interface SessionJoinResponse {
   mode: 'FREE_PACE' | 'SYNC_BLOCKS' | 'PAPER_OMR';
   currentBlock: number;
   durationMinutes: number;
+  student?: {
+    id: number;
+    fullName: string;
+    studentCode?: string | null;
+    email?: string | null;
+    phoneNumber?: string | null;
+  };
   questions: Question[];
 }
 
@@ -142,6 +149,7 @@ export interface AttendeeMonitorData {
   fullName: string;
   studentCode?: string;
   phoneNumber?: string;
+  email?: string;
   attendanceStatus: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'ABSENT';
   whatsappNotified: boolean;
   whatsappLink: string | null;
@@ -205,6 +213,28 @@ export interface TeacherData {
     startTime: string;
     endTime: string;
     enrolledCount: number;
+  }[];
+}
+
+export interface RegisteredStudentData {
+  id: number;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  phoneNumber?: string | null;
+  studentCode?: string | null;
+  status: { id: number; name: string };
+  createdAt: string;
+  enrolledCoursesCount: number;
+  enrolledCourses: {
+    id: string;
+    courseName: string;
+    levelName?: string;
+    courseModality?: string;
+    scheduleDays?: string[];
+    startTime?: string;
+    endTime?: string;
   }[];
 }
 
@@ -494,6 +524,24 @@ export const api = {
   async getLevels(): Promise<Level[]> {
     const res = await request<any>('/levels');
     return Array.isArray(res) ? res : res.data || [];
+  },
+
+  async getStudents(): Promise<RegisteredStudentData[]> {
+    const res = await request<any>('/courses/students');
+    return Array.isArray(res) ? res : [];
+  },
+
+  async enrollStudent(courseId: string, studentId: number): Promise<any> {
+    return request<any>(`/courses/${courseId}/enroll`, {
+      method: 'POST',
+      body: JSON.stringify({ studentId }),
+    });
+  },
+
+  async unenrollStudent(courseId: string, studentId: number): Promise<any> {
+    return request<any>(`/courses/${courseId}/enroll/${studentId}`, {
+      method: 'DELETE',
+    });
   },
 
   async getTeachers(): Promise<TeacherData[]> {

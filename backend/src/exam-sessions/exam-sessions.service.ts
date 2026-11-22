@@ -206,6 +206,8 @@ export class ExamSessionsService {
       true,
     );
 
+    const studentUser = attendee.student;
+
     return {
       sessionId: session.id,
       sessionPin: session.sessionPin,
@@ -214,6 +216,15 @@ export class ExamSessionsService {
       mode: session.mode,
       currentBlock: session.currentBlock,
       durationMinutes: session.examTemplate.durationMinutes,
+      student: {
+        id: studentUser.id,
+        fullName:
+          `${studentUser.firstName || ''} ${studentUser.lastName || ''}`.trim() ||
+          studentUser.email,
+        studentCode: studentUser.studentCode,
+        email: studentUser.email,
+        phoneNumber: studentUser.phoneNumber,
+      },
       questions,
     };
   }
@@ -233,7 +244,7 @@ export class ExamSessionsService {
       ) {
         const cleanPhone = student.phoneNumber.replace(/[^0-9]/g, '');
         const message = encodeURIComponent(
-          `Hola ${student.firstName}, el examen "${session.examTemplate.title}" de tu clase "${session.course.courseName}" ha iniciado y figuras como AUSENTE. Comunícate de inmediato con tu profesor.`,
+          `Hola ${student.firstName}, el examen "${session.examTemplate.title}" de tu clase "${session.course.courseName}" ha iniciado y figuras como AUSENTE. Ingresa a la plataforma con el PIN ${session.sessionPin} para presentar tu evaluación de inmediato.`,
         );
         whatsappLink = `https://wa.me/${cleanPhone}?text=${message}`;
       }
@@ -244,6 +255,7 @@ export class ExamSessionsService {
         fullName: `${student.firstName} ${student.lastName}`,
         studentCode: student.studentCode,
         phoneNumber: student.phoneNumber,
+        email: student.email,
         attendanceStatus: attendee.attendanceStatus,
         whatsappNotified: attendee.whatsappNotified,
         whatsappLink,

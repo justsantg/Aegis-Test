@@ -257,6 +257,73 @@ export class CoursesService {
     };
   }
 
+  async getStudents(): Promise<any[]> {
+    const students = await this.userRepository.find({
+      where: { role: { id: RoleEnum.student } },
+      relations: ['status'],
+      order: { firstName: 'ASC' },
+    });
+
+    const enrollments = await this.enrollmentRepository.find({
+      where: { enrollmentStatus: EnrollmentStatusEnum.ACTIVE },
+      relations: ['course', 'course.level', 'student'],
+    });
+
+    return students.map((student) => {
+      const studentEnrollments = enrollments.filter(
+        (e) => e.student && e.student.id === student.id,
+      );
+      return {
+        id: student.id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        fullName:
+          `${student.firstName || ''} ${student.lastName || ''}`.trim() ||
+          student.email ||
+          'Estudiante',
+        email: student.email,
+        phoneNumber: student.phoneNumber,
+        studentCode: student.studentCode,
+        status: student.status,
+        createdAt: student.createdAt,
+        enrolledCoursesCount: studentEnrollments.length,
+        enrolledCourses: studentEnrollments.map((e) => ({
+          id: e.course?.id,
+          courseName: e.course?.courseName,
+          levelName: e.course?.level?.name,
+          courseModality: e.course?.courseModality,
+          scheduleDays: e.course?.scheduleDays,
+          startTime: e.course?.startTime,
+          endTime: e.course?.endTime,
+        })),
+      };
+    });
+  }
+
+  async unenrollStudent(
+    courseId: string,
+    studentId: number,
+  ): Promise<{ success: boolean; message: string }> {
+    const enrollment = await this.enrollmentRepository.findOne({
+      where: {
+        course: { id: courseId },
+        student: { id: studentId },
+      },
+    });
+
+    if (!enrollment) {
+      throw new NotFoundException(
+        'El estudiante no se encuentra matriculado en este curso',
+      );
+    }
+
+    await this.enrollmentRepository.remove(enrollment);
+    return {
+      success: true,
+      message: 'Estudiante retirado del curso exitosamente',
+    };
+  }
+
   async delete(id: string): Promise<{ success: boolean; message: string }> {
     const course = await this.findOne(id);
     await this.courseRepository.remove(course);

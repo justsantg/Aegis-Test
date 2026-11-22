@@ -3,7 +3,14 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, Course, ExamTemplate, AuthUser, TeacherData } from '../../lib/api';
+import {
+  api,
+  Course,
+  ExamTemplate,
+  AuthUser,
+  TeacherData,
+  RegisteredStudentData,
+} from '../../lib/api';
 import {
   ArrowLeft,
   Calendar,
@@ -19,9 +26,16 @@ import {
   Building2,
   Filter,
   FileSpreadsheet,
+  Search,
+  MessageCircle,
+  ExternalLink,
+  Mail,
+  Phone,
+  UserPlus,
 } from 'lucide-react';
 import RoleGuard from '../../components/auth/RoleGuard';
 import CourseExamManagerModal from '../../components/teacher/CourseExamManagerModal';
+import CourseRosterModal from '../../components/teacher/CourseRosterModal';
 
 const DAYS_FILTER = [
   { label: 'Todos los días', value: '' },
@@ -78,6 +92,13 @@ export default function TeacherDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Modal Course Roster & Student Directory state
+  const [rosterCourse, setRosterCourse] = useState<Course | null>(null);
+  const [activeTab, setActiveTab] = useState<'COURSES' | 'STUDENTS'>('COURSES');
+  const [students, setStudents] = useState<RegisteredStudentData[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentSearch, setStudentSearch] = useState('');
+
   // Modal Launch Session state
   const [examManagerCourse, setExamManagerCourse] = useState<Course | null>(null);
   const [activeCourse, setActiveCourse] = useState<Course | null>(null);
@@ -86,6 +107,18 @@ export default function TeacherDashboardPage() {
   const [selectedMode, setSelectedMode] = useState<'FREE_PACE' | 'SYNC_BLOCKS'>('FREE_PACE');
   const [launching, setLaunching] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
+
+  const loadStudents = async () => {
+    try {
+      setStudentsLoading(true);
+      const data = await api.getStudents();
+      setStudents(data);
+    } catch (err: any) {
+      console.error('Error al cargar lista de estudiantes:', err);
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -99,6 +132,7 @@ export default function TeacherDashboardPage() {
       }
     } catch {}
     setUserLoaded(true);
+    loadStudents();
   }, []);
 
   useEffect(() => {
@@ -179,6 +213,17 @@ export default function TeacherDashboardPage() {
       setLaunching(false);
     }
   };
+
+  const filteredStudents = students.filter((s) => {
+    if (!studentSearch.trim()) return true;
+    const q = studentSearch.toLowerCase();
+    return (
+      s.fullName?.toLowerCase().includes(q) ||
+      s.studentCode?.toLowerCase().includes(q) ||
+      s.email?.toLowerCase().includes(q) ||
+      s.phoneNumber?.toLowerCase().includes(q)
+    );
+  });
 
   const isAdmin = currentUser?.role?.id === 1;
 
@@ -271,23 +316,54 @@ export default function TeacherDashboardPage() {
             )}
 
             {/* Day Filter Pills */}
-            <div className="flex flex-wrap gap-1.5">
-              {DAYS_FILTER.map((d) => (
-                <button
-                  key={d.value}
-                  type="button"
-                  onClick={() => setSelectedDay(d.value)}
-                  className={`px-3 py-1 text-xs font-medium rounded-btn border cursor-pointer ${
-                    selectedDay === d.value
-                      ? 'bg-ink text-paper border-ink'
-                      : 'bg-paper-card text-ink border-rule hover:border-rule-strong'
-                  }`}
-                >
-                  {d.label}
-                </button>
-              ))}
-            </div>
+            {activeTab === 'COURSES' && (
+              <div className="flex flex-wrap gap-1.5">
+                {DAYS_FILTER.map((d) => (
+                  <button
+                    key={d.value}
+                    type="button"
+                    onClick={() => setSelectedDay(d.value)}
+                    className={`px-3 py-1 text-xs font-medium rounded-btn border cursor-pointer ${
+                      selectedDay === d.value
+                        ? 'bg-ink text-paper border-ink'
+                        : 'bg-paper-card text-ink border-rule hover:border-rule-strong'
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+        </div>
+
+        {/* Navigation Tabs */}
+        <div className="flex items-center space-x-2 border-b border-rule pt-4 pb-2 mt-4">
+          <button
+            type="button"
+            onClick={() => setActiveTab('COURSES')}
+            className={`px-4 py-2 text-xs font-bold rounded-btn transition-[background-color,color] cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'COURSES'
+                ? 'bg-ink text-paper shadow-xs'
+                : 'bg-paper-card text-ink-muted hover:text-ink hover:bg-paper-muted border border-rule'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Mis Cursos Asignados ({courses.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('STUDENTS')}
+            className={`px-4 py-2 text-xs font-bold rounded-btn transition-[background-color,color] cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'STUDENTS'
+                ? 'bg-ink text-paper shadow-xs'
+                : 'bg-paper-card text-ink-muted hover:text-ink hover:bg-paper-muted border border-rule'
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>Directorio de Estudiantes Registrados ({students.length})</span>
+          </button>
         </div>
 
         {/* Error alert */}
@@ -298,130 +374,320 @@ export default function TeacherDashboardPage() {
         )}
 
         {/* Courses Grid */}
-        <div className="mt-8">
-          {loading ? (
-            <div className="flex items-center justify-center p-12 text-ink-muted">
-              <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              <span>Cargando cursos asignados...</span>
-            </div>
-          ) : courses.length === 0 ? (
-            <div className="p-12 text-center bg-paper-card border border-rule rounded-card text-ink-muted text-sm space-y-2">
-              <p className="font-semibold text-ink">
-                {!isAdmin
-                  ? selectedDay
-                    ? `No tienes clases asignadas los ${
-                        DAYS_FILTER.find((d) => d.value === selectedDay)?.label || 'días seleccionados'
-                      }.`
-                    : 'No tienes clases asignadas actualmente en este período.'
-                  : 'No se encontraron cursos programados para el filtro seleccionado.'}
-              </p>
-              <p className="text-xs text-ink-muted">
-                {selectedDay && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDay('')}
-                    className="text-accent hover:underline font-semibold cursor-pointer"
-                  >
-                    Ver todos los días
-                  </button>
-                )}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {courses.map((course) => {
-                const startTime = course.startTime || course.scheduleStartTime;
-                const endTime = course.endTime || course.scheduleEndTime;
-                const capacity = course.capacity || course.maxCapacity || 8;
-                const teacherName = course.teacher
-                  ? course.teacher.fullName || `${course.teacher.firstName} ${course.teacher.lastName}`
-                  : null;
+        {activeTab === 'COURSES' && (
+          <div className="mt-6">
+            {loading ? (
+              <div className="flex items-center justify-center p-12 text-ink-muted">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                <span>Cargando cursos asignados...</span>
+              </div>
+            ) : courses.length === 0 ? (
+              <div className="p-12 text-center bg-paper-card border border-rule rounded-card text-ink-muted text-sm space-y-2">
+                <p className="font-semibold text-ink">
+                  {!isAdmin
+                    ? selectedDay
+                      ? `No tienes clases asignadas los ${
+                          DAYS_FILTER.find((d) => d.value === selectedDay)?.label || 'días seleccionados'
+                        }.`
+                      : 'No tienes clases asignadas actualmente en este período.'
+                    : 'No se encontraron cursos programados para el filtro seleccionado.'}
+                </p>
+                <p className="text-xs text-ink-muted">
+                  {selectedDay && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDay('')}
+                      className="text-accent hover:underline font-semibold cursor-pointer"
+                    >
+                      Ver todos los días
+                    </button>
+                  )}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {courses.map((course) => {
+                  const startTime = course.startTime || course.scheduleStartTime;
+                  const endTime = course.endTime || course.scheduleEndTime;
+                  const capacity = course.capacity || course.maxCapacity || 8;
+                  const teacherName = course.teacher
+                    ? course.teacher.fullName || `${course.teacher.firstName} ${course.teacher.lastName}`
+                    : null;
 
-                return (
-                  <div
-                    key={course.id}
-                    className="bg-paper-card border border-rule hover:border-rule-strong rounded-card p-5 flex flex-col justify-between space-y-4 shadow-xs"
-                  >
-                    <div className="space-y-3">
-                      {/* Badges */}
-                      <div className="flex items-center justify-between">
-                        <span className="px-2.5 py-0.5 bg-accent-soft text-accent text-xs font-bold rounded">
-                          {course.level?.name || 'Nivel'}
-                        </span>
-                        <span className="text-[11px] font-medium text-ink-muted bg-paper-muted px-2 py-0.5 rounded">
-                          {course.courseModality === 'REGULAR_GROUP'
-                            ? 'Grupo Regular'
-                            : course.courseModality === 'PERSONALIZED_1ON1'
-                            ? 'Particular 1-a-1'
-                            : 'Semipersonalizado'}
-                        </span>
-                      </div>
-
-                      <h2 className="text-base font-bold text-ink leading-snug">
-                        {course.courseName}
-                      </h2>
-
-                      {/* Teacher label (visible to Admin) */}
-                      {isAdmin && teacherName && (
-                        <div className="text-xs text-accent font-medium">
-                          Docente: <strong className="text-ink">{teacherName}</strong>
-                        </div>
-                      )}
-
-                      {/* Schedule Details */}
-                      <div className="space-y-1.5 text-xs text-ink-muted">
-                        <div className="flex items-center">
-                          <Calendar className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-ink-muted" />
-                          <span className="font-medium text-ink">
-                            {formatScheduleDays(course.scheduleDays)}
+                  return (
+                    <div
+                      key={course.id}
+                      className="bg-paper-card border border-rule hover:border-rule-strong rounded-card p-5 flex flex-col justify-between space-y-4 shadow-xs"
+                    >
+                      <div className="space-y-3">
+                        {/* Badges */}
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-0.5 bg-accent-soft text-accent text-xs font-bold rounded">
+                            {course.level?.name || 'Nivel'}
+                          </span>
+                          <span className="text-[11px] font-medium text-ink-muted bg-paper-muted px-2 py-0.5 rounded">
+                            {course.courseModality === 'REGULAR_GROUP'
+                              ? 'Grupo Regular'
+                              : course.courseModality === 'PERSONALIZED_1ON1'
+                              ? 'Particular 1-a-1'
+                              : 'Semipersonalizado'}
                           </span>
                         </div>
-                        <div className="flex items-center">
-                          <Clock className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-ink-muted" />
-                          <span>
-                            {formatTimeRange(startTime, endTime)}
-                          </span>
-                        </div>
-                        <div className="flex items-center">
-                          <Users className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-ink-muted" />
-                          <span>Capacidad: {capacity} estudiantes</span>
-                        </div>
-                        {course.classroom && (
-                          <div className="flex items-center">
-                            <Building2 className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-ink-muted" />
-                            <span>{course.classroom}</span>
+
+                        <h2 className="text-base font-bold text-ink leading-snug">
+                          {course.courseName}
+                        </h2>
+
+                        {/* Teacher label (visible to Admin) */}
+                        {isAdmin && teacherName && (
+                          <div className="text-xs text-accent font-medium">
+                            Docente: <strong className="text-ink">{teacherName}</strong>
                           </div>
                         )}
+
+                        {/* Schedule Details */}
+                        <div className="space-y-1.5 text-xs text-ink-muted">
+                          <div className="flex items-center">
+                            <Calendar className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-ink-muted" />
+                            <span className="font-medium text-ink">
+                              {formatScheduleDays(course.scheduleDays)}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            <Clock className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-ink-muted" />
+                            <span>
+                              {formatTimeRange(startTime, endTime)}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            <Users className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-ink-muted" />
+                            <span className={course.enrollments?.length ? 'font-medium text-ink' : ''}>
+                              {course.enrollments?.length || 0} / {capacity} alumnos matriculados
+                            </span>
+                          </div>
+                          {course.classroom && (
+                            <div className="flex items-center">
+                              <Building2 className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-ink-muted" />
+                              <span>{course.classroom}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="pt-2 border-t border-rule flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => setRosterCourse(course)}
+                          className="py-2.5 px-3 bg-paper border border-rule hover:border-rule-strong text-ink text-xs font-semibold rounded-btn inline-flex items-center justify-center space-x-1.5 cursor-pointer flex-shrink-0"
+                          title="Ver y gestionar lista oficial de alumnos matriculados"
+                        >
+                          <Users className="w-3.5 h-3.5 text-accent" />
+                          <span>Alumnos ({course.enrollments?.length || 0})</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setExamManagerCourse(course)}
+                          className="py-2.5 px-3 bg-paper border border-rule hover:border-rule-strong text-ink text-xs font-semibold rounded-btn inline-flex items-center justify-center space-x-1.5 cursor-pointer flex-shrink-0"
+                          title="Gestionar, crear o importar exámenes de este curso"
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-accent" />
+                          <span>Exámenes</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenLaunchModal(course)}
+                          className="flex-1 py-2.5 px-3 bg-accent text-accent-ink hover:bg-accent-hover text-xs font-semibold rounded-btn inline-flex items-center justify-center space-x-1.5 cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                          <span>Iniciar</span>
+                        </button>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
-                    {/* Action Buttons */}
-                    <div className="pt-2 border-t border-rule flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setExamManagerCourse(course)}
-                        className="py-2.5 px-3 bg-paper border border-rule hover:border-rule-strong text-ink text-xs font-semibold rounded-btn inline-flex items-center justify-center space-x-1.5 cursor-pointer flex-shrink-0"
-                        title="Gestionar, crear o importar exámenes de este curso"
-                      >
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-accent" />
-                        <span>Exámenes</span>
-                      </button>
+        {/* Student Directory View */}
+        {activeTab === 'STUDENTS' && (
+          <div className="mt-6 space-y-4">
+            {/* Search and Stats Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-paper-card border border-rule rounded-card p-4 shadow-xs">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-ink-muted absolute left-3 top-3 pointer-events-none" />
+                <input
+                  type="text"
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  placeholder="Buscar por nombre, código institucional, correo o teléfono..."
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-btn border border-rule bg-paper text-ink focus:border-accent focus:ring-1 focus:ring-accent"
+                />
+              </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleOpenLaunchModal(course)}
-                        className="flex-1 py-2.5 px-3 bg-accent text-accent-ink hover:bg-accent-hover text-xs font-semibold rounded-btn inline-flex items-center justify-center space-x-1.5 cursor-pointer"
-                      >
-                        <Play className="w-3.5 h-3.5" />
-                        <span>Iniciar Sesión</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              <div className="flex items-center gap-3 text-xs text-ink-muted">
+                <span>
+                  Total Registrados: <strong className="text-ink">{students.length}</strong>
+                </span>
+                <span>·</span>
+                <span>
+                  Con Clases Activas:{' '}
+                  <strong className="text-ink">
+                    {students.filter((s) => s.enrolledCoursesCount > 0).length}
+                  </strong>
+                </span>
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* Students Table */}
+            {studentsLoading ? (
+              <div className="py-16 text-center text-ink-muted text-xs flex items-center justify-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Cargando directorio de estudiantes...</span>
+              </div>
+            ) : filteredStudents.length === 0 ? (
+              <div className="p-12 text-center bg-paper-card border border-rule rounded-card text-ink-muted text-xs space-y-1">
+                <p className="font-semibold text-ink">
+                  {studentSearch
+                    ? 'No se encontraron estudiantes para la búsqueda ingresada.'
+                    : 'No hay estudiantes registrados en la plataforma.'}
+                </p>
+                {studentSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setStudentSearch('')}
+                    className="text-accent hover:underline font-semibold cursor-pointer"
+                  >
+                    Limpiar filtro de búsqueda
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="bg-paper-card border border-rule rounded-card overflow-hidden shadow-xs">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-rule bg-paper-muted text-ink-muted font-semibold">
+                      <th className="py-3 px-4">Estudiante Registrado</th>
+                      <th className="py-3 px-4">Código Institucional</th>
+                      <th className="py-3 px-4">Correo</th>
+                      <th className="py-3 px-4">Teléfono / WhatsApp</th>
+                      <th className="py-3 px-4">Cursos Matriculados</th>
+                      <th className="py-3 px-4 text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-rule">
+                    {filteredStudents.map((student) => {
+                      const cleanPhone = student.phoneNumber
+                        ? student.phoneNumber.replace(/[^0-9]/g, '')
+                        : null;
+                      const whatsappUrl = cleanPhone
+                        ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
+                            `Hola ${student.firstName}, te contacto desde Cambridge Academy.`,
+                          )}`
+                        : null;
+
+                      return (
+                        <tr
+                          key={student.id}
+                          className="hover:bg-paper-muted/50 transition-[background-color]"
+                        >
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-full bg-accent-soft text-accent font-bold flex items-center justify-center text-xs shrink-0">
+                                {student.firstName?.[0] || 'E'}
+                                {student.lastName?.[0] || 'S'}
+                              </div>
+                              <div>
+                                <div className="font-bold text-ink">
+                                  {student.fullName}
+                                </div>
+                                <div className="text-[11px] text-ink-muted">
+                                  Registrado: {new Date(student.createdAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 font-mono font-bold text-accent">
+                            {student.studentCode || (
+                              <span className="text-ink-muted/50 font-normal italic">
+                                Sin código
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 text-ink-muted">
+                            <div className="flex items-center gap-1">
+                              <Mail className="w-3 h-3 opacity-60" />
+                              <span>{student.email}</span>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {whatsappUrl ? (
+                              <a
+                                href={whatsappUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center px-2 py-1 bg-success-soft text-success hover:bg-success hover:text-paper font-semibold rounded text-[11px] transition-[background-color,color] gap-1 cursor-pointer"
+                                title="Contactar por WhatsApp"
+                              >
+                                <MessageCircle className="w-3 h-3" />
+                                <span>{student.phoneNumber}</span>
+                                <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                              </a>
+                            ) : (
+                              <span className="text-ink-muted/50 italic text-[11px]">
+                                Sin teléfono
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {student.enrolledCourses?.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {student.enrolledCourses.map((c) => (
+                                  <span
+                                    key={c.id}
+                                    className="px-2 py-0.5 bg-paper-muted text-ink border border-rule rounded text-[10px] font-medium"
+                                  >
+                                    {c.courseName} ({c.levelName})
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-ink-muted/50 italic text-[11px]">
+                                Sin matrícula activa
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 text-right">
+                            {courses.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setRosterCourse(courses[0])}
+                                className="px-2.5 py-1 bg-paper border border-rule hover:border-rule-strong text-ink hover:text-accent font-semibold rounded text-[11px] inline-flex items-center gap-1 cursor-pointer transition-[border-color,color]"
+                                title="Abrir gestión de matrículas"
+                              >
+                                <UserPlus className="w-3 h-3 text-accent" />
+                                <span>Gestionar Matrícula</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Modal: Launch Exam Session */}
         {activeCourse && (
@@ -570,6 +836,18 @@ export default function TeacherDashboardPage() {
             onExamCreated={() =>
               loadCourses(selectedDay, currentUser, adminTeacherId)
             }
+          />
+        )}
+
+        {/* Modal: Course Roster & Student Enrollment */}
+        {rosterCourse && (
+          <CourseRosterModal
+            course={rosterCourse}
+            onClose={() => setRosterCourse(null)}
+            onRosterChanged={() => {
+              loadCourses(selectedDay, currentUser, adminTeacherId);
+              loadStudents();
+            }}
           />
         )}
       </div>

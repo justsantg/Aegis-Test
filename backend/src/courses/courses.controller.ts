@@ -25,6 +25,11 @@ export class CoursesController {
     return this.coursesService.getTeachers();
   }
 
+  @Get('students')
+  async getStudents() {
+    return this.coursesService.getStudents();
+  }
+
   @Post('teachers')
   async createTeacher(
     @Body()
@@ -74,6 +79,14 @@ export class CoursesController {
   @Post(':id/enroll')
   async enrollStudent(@Param('id') id: string, @Body() dto: EnrollStudentDto) {
     return this.coursesService.enrollStudent(id, dto.studentId);
+  }
+
+  @Delete(':id/enroll/:studentId')
+  async unenrollStudent(
+    @Param('id') id: string,
+    @Param('studentId') studentId: string,
+  ) {
+    return this.coursesService.unenrollStudent(id, Number(studentId));
   }
 
   @Get(':id/roster')

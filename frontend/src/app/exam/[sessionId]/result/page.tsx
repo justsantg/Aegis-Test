@@ -10,6 +10,12 @@ import { SubmitResultResponse } from '../../../../lib/api';
 export default function ExamResultPage() {
   const router = useRouter();
   const [result, setResult] = useState<SubmitResultResponse | null>(null);
+  const [sessionMeta, setSessionMeta] = useState<{
+    studentName?: string;
+    studentCode?: string;
+    courseName?: string;
+    examTitle?: string;
+  } | null>(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('exam_result');
@@ -17,21 +23,35 @@ export default function ExamResultPage() {
       try {
         const parsed = JSON.parse(stored);
         setResult(parsed);
-
-        // Fire festive celebration confetti
-        try {
-          confetti({
-            particleCount: 70,
-            spread: 60,
-            origin: { y: 0.6 },
-          });
-        } catch {
-          // ignore if canvas not supported
-        }
-        return;
       } catch {
         // ignore
       }
+    }
+
+    const sessionStored = sessionStorage.getItem('active_exam_session');
+    if (sessionStored) {
+      try {
+        const s = JSON.parse(sessionStored);
+        setSessionMeta({
+          studentName: s.studentName || s.student?.fullName,
+          studentCode: s.studentCode || s.student?.studentCode,
+          courseName: s.courseName,
+          examTitle: s.examTitle,
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    // Fire festive celebration confetti
+    try {
+      confetti({
+        particleCount: 70,
+        spread: 60,
+        origin: { y: 0.6 },
+      });
+    } catch {
+      // ignore if canvas not supported
     }
   }, [router]);
 
@@ -56,6 +76,30 @@ export default function ExamResultPage() {
             Tus respuestas han sido recibidas y calificadas por el sistema
           </p>
         </div>
+
+        {/* Student and Exam Meta */}
+        {sessionMeta && (sessionMeta.studentName || sessionMeta.courseName) && (
+          <div className="p-3 bg-paper-muted/80 rounded-btn border border-rule text-xs space-y-1">
+            {sessionMeta.studentName && (
+              <div className="font-bold text-ink">
+                {sessionMeta.studentName}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center justify-center gap-2 text-ink-muted text-[11px]">
+              {sessionMeta.studentCode && (
+                <span className="font-mono font-bold text-accent">
+                  {sessionMeta.studentCode}
+                </span>
+              )}
+              {sessionMeta.courseName && (
+                <span>· {sessionMeta.courseName}</span>
+              )}
+              {sessionMeta.examTitle && (
+                <span>· {sessionMeta.examTitle}</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Score Card */}
         <div className="p-5 bg-paper-muted rounded-card border border-rule space-y-2">

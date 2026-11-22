@@ -285,11 +285,18 @@ export default function TeacherSessionMonitorPage() {
 
                 return (
                   <tr key={attendee.attendeeId} className="hover:bg-paper-muted/50">
-                    <td className="py-3 px-4 font-semibold text-ink">
-                      {attendee.fullName}
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-ink">
+                        {attendee.fullName}
+                      </div>
+                      <div className="text-[11px] text-ink-muted">
+                        {attendee.email || (attendee.phoneNumber ? attendee.phoneNumber : '')}
+                      </div>
                     </td>
-                    <td className="py-3 px-4 text-ink-muted font-mono">
-                      {attendee.studentCode || '---'}
+                    <td className="py-3 px-4">
+                      <span className="font-mono font-bold text-accent px-2 py-0.5 bg-paper-muted rounded border border-rule text-xs">
+                        {attendee.studentCode || '---'}
+                      </span>
                     </td>
                     <td className="py-3 px-4">
                       {status === 'IN_PROGRESS' && (

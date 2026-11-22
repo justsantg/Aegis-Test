@@ -8,6 +8,9 @@ import { CourseEntity } from '../courses/infrastructure/persistence/relational/e
 import { CourseEnrollmentEntity } from '../courses/infrastructure/persistence/relational/entities/course-enrollment.entity';
 import { ExamTemplateEntity } from '../exams/infrastructure/persistence/relational/entities/exam-template.entity';
 import { UserEntity } from '../users/infrastructure/persistence/relational/entities/user.entity';
+import { RoleEntity } from '../roles/infrastructure/persistence/relational/entities/role.entity';
+import { StatusEntity } from '../statuses/infrastructure/persistence/relational/entities/status.entity';
+import { FileEntity } from '../files/infrastructure/persistence/relational/entities/file.entity';
 import { ExamsModule } from '../exams/exams.module';
 import { ExamSessionsService } from './exam-sessions.service';
 import { ExamSessionsController } from './exam-sessions.controller';
@@ -23,6 +26,9 @@ import { ExamSessionsController } from './exam-sessions.controller';
       CourseEnrollmentEntity,
       ExamTemplateEntity,
       UserEntity,
+      RoleEntity,
+      StatusEntity,
+      FileEntity,
     ]),
     ExamsModule,
   ],
