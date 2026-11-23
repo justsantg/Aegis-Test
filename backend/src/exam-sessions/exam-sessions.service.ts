@@ -247,9 +247,19 @@ export class ExamSessionsService {
           attendee.attendanceStatus === AttendanceStatusEnum.ABSENT)
       ) {
         const cleanPhone = student.phoneNumber.replace(/[^0-9]/g, '');
-        const message = encodeURIComponent(
-          `Hola ${student.firstName}, el examen "${session.examTemplate.title}" de tu clase "${session.course.courseName}" ha iniciado y figuras como AUSENTE. Ingresa a la plataforma con el PIN ${session.sessionPin} para presentar tu evaluación de inmediato.`,
-        );
+        const examName = session.examTemplate?.title || 'la evaluación';
+        const isSessionFinished =
+          session.status === SessionStatusEnum.FINISHED;
+
+        let messageText = `Hola ${student.firstName}, no te presentaste al examen "${examName}". Comunícate con el coordinador para una reprogramación en caso de asuntos externos, por el contrario tu nota quedará en 0.`;
+        if (
+          !isSessionFinished &&
+          attendee.attendanceStatus === AttendanceStatusEnum.PENDING
+        ) {
+          messageText = `Hola ${student.firstName}, no te has presentado al examen "${examName}" (PIN: ${session.sessionPin}). Si aún estás a tiempo, ingresa de inmediato; de lo contrario, comunícate con el coordinador para una reprogramación en caso de asuntos externos, por el contrario tu nota quedará en 0.`;
+        }
+
+        const message = encodeURIComponent(messageText);
         whatsappLink = `https://wa.me/${cleanPhone}?text=${message}`;
       }
 

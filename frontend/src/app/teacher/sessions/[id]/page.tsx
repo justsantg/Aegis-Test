@@ -16,6 +16,8 @@ import {
   StopCircle,
   Users,
   ShieldAlert,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import RoleGuard from '../../../../components/auth/RoleGuard';
 
@@ -30,6 +32,15 @@ export default function TeacherSessionMonitorPage() {
   const [advancing, setAdvancing] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirmFinishModal, setShowConfirmFinishModal] = useState(false);
+  const [showIncidentsModal, setShowIncidentsModal] = useState(false);
+  const [joinUrl, setJoinUrl] = useState('/exam/join');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setJoinUrl(`${window.location.origin}/exam/join`);
+    }
+  }, []);
 
   // Poll dashboard every 3.5 seconds for real-time check-ins and scores
   useEffect(() => {
@@ -70,16 +81,13 @@ export default function TeacherSessionMonitorPage() {
     }
   };
 
-  const handleFinishSession = async () => {
-    if (!confirm('¿Estás seguro de finalizar la sesión? Los alumnos que no ingresaron quedarán automáticamente registrados como Ausente (No Presentó - N/P).')) {
-      return;
-    }
-
+  const handleExecuteFinishSession = async () => {
     try {
       setFinishing(true);
       await api.finishSession(sessionId);
       const updated = await api.getMonitorDashboard(sessionId);
       setDashboard(updated);
+      setShowConfirmFinishModal(false);
     } catch (err: any) {
       setError(err.message || 'Error al cerrar la sesión');
     } finally {
@@ -142,7 +150,7 @@ export default function TeacherSessionMonitorPage() {
           {!isFinished && (
             <button
               type="button"
-              onClick={handleFinishSession}
+              onClick={() => setShowConfirmFinishModal(true)}
               disabled={finishing}
               className="px-3 py-1.5 bg-danger text-paper-card hover:bg-danger/90 rounded-btn text-xs font-semibold inline-flex items-center space-x-1 cursor-pointer disabled:opacity-50"
             >
@@ -170,7 +178,7 @@ export default function TeacherSessionMonitorPage() {
             {dashboard.sessionPin}
           </div>
           <p className="text-xs text-ink-muted">
-            Los estudiantes ingresan en: <strong className="text-ink">http://localhost:3000/exam/join</strong>
+            Los estudiantes ingresan en: <strong className="text-ink">{joinUrl}</strong>
           </p>
         </div>
 
@@ -244,12 +252,14 @@ export default function TeacherSessionMonitorPage() {
               </p>
             </div>
           </div>
-          <a
-            href="#security-incidents-section"
-            className="px-3 py-1.5 bg-danger text-white hover:bg-danger/90 rounded-btn text-xs font-bold inline-flex items-center gap-1 shadow-xs cursor-pointer shrink-0"
+          <button
+            type="button"
+            onClick={() => setShowIncidentsModal(true)}
+            className="px-3 py-1.5 bg-danger text-white hover:bg-danger/90 rounded-btn text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 transition-transform active:scale-95"
           >
+            <ShieldAlert className="w-3.5 h-3.5" />
             <span>Ver Informe de Incidentes</span>
-          </a>
+          </button>
         </div>
       )}
 
@@ -478,6 +488,246 @@ export default function TeacherSessionMonitorPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de Confirmación para Finalizar Sesión (Reemplazo de dialog confirm nativo) */}
+      {showConfirmFinishModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => !finishing && setShowConfirmFinishModal(false)}
+        >
+          <div 
+            className="bg-paper-card border border-rule rounded-card max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-danger-soft text-danger rounded-full shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-ink">
+                  ¿Finalizar la Sesión de Examen?
+                </h3>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  Esta acción cerrará la sesión de evaluación para todos los alumnos. Aquellos que no hayan ingresado o no hayan completado el examen quedarán registrados automáticamente como{' '}
+                  <strong className="text-danger font-semibold">Ausente (No Presentó - N/P)</strong> con calificación <strong className="text-danger font-semibold">0.0</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-paper-muted rounded-btn border border-rule text-xs space-y-1.5">
+              <div className="flex justify-between items-center text-ink">
+                <span className="text-ink-muted">Estudiantes completados:</span>
+                <strong className="text-success font-bold">
+                  {dashboard.attendees.filter((a) => a.attendanceStatus === 'COMPLETED').length} de {dashboard.attendees.length}
+                </strong>
+              </div>
+              <div className="flex justify-between items-center text-ink">
+                <span className="text-ink-muted">Pendientes / En examen (quedarán N/P):</span>
+                <strong className="text-danger font-bold">
+                  {dashboard.attendees.filter((a) => a.attendanceStatus !== 'COMPLETED').length}
+                </strong>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-rule">
+              <button
+                type="button"
+                onClick={() => setShowConfirmFinishModal(false)}
+                disabled={finishing}
+                className="px-4 py-2 bg-paper-card border border-rule text-ink hover:bg-paper-muted rounded-btn text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteFinishSession}
+                disabled={finishing}
+                className="px-4 py-2 bg-danger text-white hover:bg-danger/90 rounded-btn text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs transition-colors"
+              >
+                {finishing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Finalizando...</span>
+                  </>
+                ) : (
+                  <>
+                    <StopCircle className="w-3.5 h-3.5" />
+                    <span>Sí, Finalizar Sesión</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Informe de Incidentes de Seguridad & Anti-Fraude */}
+      {showIncidentsModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setShowIncidentsModal(false)}
+        >
+          <div 
+            className="bg-paper-card border border-rule rounded-card max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-150 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 border-b border-rule flex items-center justify-between bg-paper-muted">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-danger-soft text-danger rounded-full">
+                  <ShieldAlert className="w-5 h-5 text-danger" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-ink">
+                    Informe de Auditoría de Seguridad & Anti-Fraude
+                  </h3>
+                  <p className="text-[11px] text-ink-muted">
+                    Registro cronológico de salidas de pantalla, pérdida de foco y eventos sospechosos
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowIncidentsModal(false)}
+                className="p-1.5 text-ink-muted hover:text-ink hover:bg-paper-card rounded-btn cursor-pointer transition-colors"
+                title="Cerrar modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 gap-3 p-3 bg-paper-card border-b border-rule text-xs">
+              <div className="p-2.5 bg-paper-muted rounded-btn border border-rule flex items-center justify-between">
+                <span className="text-ink-muted">Total Infracciones:</span>
+                <span className="font-bold text-danger font-mono text-sm">
+                  {dashboard.summary.totalInfractions || 0}
+                </span>
+              </div>
+              <div className="p-2.5 bg-paper-muted rounded-btn border border-rule flex items-center justify-between">
+                <span className="text-ink-muted">Estudiantes con infracciones:</span>
+                <span className="font-bold text-danger font-mono text-sm">
+                  {dashboard.summary.studentsWithInfractions || 0}
+                </span>
+              </div>
+            </div>
+
+            {/* Scrollable Incidents List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {(!dashboard.securityIncidents || dashboard.securityIncidents.length === 0) ? (
+                <div className="py-12 text-center text-ink-muted space-y-2">
+                  <CheckCircle2 className="w-8 h-8 text-success mx-auto opacity-80" />
+                  <p className="text-sm font-bold text-ink">
+                    Sin incidencias de seguridad registradas
+                  </p>
+                  <p className="text-xs text-ink-muted max-w-sm mx-auto">
+                    Ningún estudiante ha abandonado la pantalla de evaluación ni se han detectado intentos de uso de IA o herramientas externas.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-rule bg-paper-muted text-ink-muted font-semibold">
+                        <th className="py-2.5 px-3">Hora</th>
+                        <th className="py-2.5 px-3">Estudiante</th>
+                        <th className="py-2.5 px-3">Tipo Infracción</th>
+                        <th className="py-2.5 px-3">Detalle</th>
+                        <th className="py-2.5 px-3">Reincidencia</th>
+                        <th className="py-2.5 px-3 text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-rule font-medium">
+                      {dashboard.securityIncidents.map((incident) => {
+                        const attendee = dashboard.attendees.find((a) => a.studentId === incident.studentId);
+                        const formattedTime = new Date(incident.createdAt).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        });
+
+                        return (
+                          <tr key={incident.id} className="hover:bg-paper-muted/40">
+                            <td className="py-2.5 px-3 font-mono text-ink-muted whitespace-nowrap">
+                              {formattedTime}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className="font-bold text-ink block">{incident.studentName}</span>
+                              <span className="text-[10px] text-ink-muted font-mono">{incident.studentCode}</span>
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              {incident.incidentType === 'TAB_SWITCH' && (
+                                <span className="px-2 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-bold rounded text-[10px] uppercase">
+                                  Cambio Pestaña
+                                </span>
+                              )}
+                              {incident.incidentType === 'AI_POPUP_OR_WINDOW_BLUR' && (
+                                <span className="px-2 py-0.5 bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 font-bold rounded text-[10px] uppercase">
+                                  Ventana Externa / IA
+                                </span>
+                              )}
+                              {incident.incidentType === 'MOBILE_APP_SWITCH' && (
+                                <span className="px-2 py-0.5 bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300 font-bold rounded text-[10px] uppercase">
+                                  App Móvil
+                                </span>
+                              )}
+                              {incident.incidentType === 'DEVTOOLS_INSPECT' && (
+                                <span className="px-2 py-0.5 bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 font-bold rounded text-[10px] uppercase">
+                                  Inspección
+                                </span>
+                              )}
+                              {!['TAB_SWITCH', 'AI_POPUP_OR_WINDOW_BLUR', 'MOBILE_APP_SWITCH', 'DEVTOOLS_INSPECT'].includes(incident.incidentType) && (
+                                <span className="px-2 py-0.5 bg-danger-soft text-danger font-bold rounded text-[10px] uppercase">
+                                  {incident.incidentType}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-ink-muted max-w-xs truncate" title={incident.details}>
+                              {incident.details}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-danger">
+                              #{incident.incidentNumber}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              {attendee?.phoneNumber ? (
+                                <a
+                                  href={`https://wa.me/${attendee.phoneNumber.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                                    `Hola ${incident.studentName}, el sistema de evaluación ha registrado una infracción de seguridad durante tu examen (${incident.details}). Por favor regresa a la evaluación de inmediato.`,
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center px-2 py-0.5 bg-danger-soft text-danger hover:bg-danger hover:text-white font-bold rounded text-[11px] transition-colors"
+                                  title="Advertir por WhatsApp"
+                                >
+                                  <MessageCircle className="w-3 h-3 mr-1" />
+                                  <span>Advertir</span>
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-ink-muted italic">Sin teléfono</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-rule bg-paper-muted flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowIncidentsModal(false)}
+                className="px-4 py-1.5 bg-ink text-paper hover:bg-ink/90 rounded-btn text-xs font-semibold cursor-pointer shadow-xs transition-colors"
+              >
+                Cerrar Informe
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </RoleGuard>
   );
