@@ -791,7 +791,7 @@ export default function TeacherDashboardPage() {
                                   : null;
                                 const whatsappUrl = cleanPhone
                                   ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-                                      `Hola ${student.firstName}, te contacto desde Cambridge Academy respecto a tu curso de ${sec.levelName}.`,
+                                      `Hola ${student.firstName}, te contacto desde Aegis Test respecto a tu curso de ${sec.levelName}.`,
                                     )}`
                                   : null;
 
@@ -919,7 +919,7 @@ export default function TeacherDashboardPage() {
                           </span>
                         </div>
                         <p className="text-[11px] text-ink-muted mt-0.5">
-                          Alumnos registrados en Cambridge Academy que aún no tienen ningún curso o fase asignada
+                          Alumnos registrados en Aegis Test que aún no tienen ningún curso o fase asignada
                         </p>
                       </div>
 

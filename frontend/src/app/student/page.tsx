@@ -266,7 +266,7 @@ function StudentDashboardContent() {
             </div>
             <div>
               <div className="text-xs uppercase tracking-wider text-ink-muted font-bold flex items-center gap-1.5">
-                <span>Cambridge Academy</span>
+                <span>Aegis Test</span>
                 <span className="w-1 h-1 rounded-full bg-rule-dark" />
                 <span className="text-accent">Portal del Estudiante</span>
               </div>
@@ -566,7 +566,7 @@ function StudentDashboardContent() {
                         Mi Programa Académico & Asignación
                       </h2>
                       <p className="text-xs text-ink-muted">
-                        Consulta los detalles de tu curso matriculado, horarios, docente y tu progreso en la ruta oficial de Cambridge Academy.
+                        Consulta los detalles de tu curso matriculado, horarios, docente y tu progreso en la ruta oficial de Aegis Test.
                       </p>
                     </div>
 
@@ -730,7 +730,7 @@ function StudentDashboardContent() {
                     )}
                   </div>
 
-                  {/* Cambridge Academic Pathway / Roadmap de las 21 Fases */}
+                  {/* Aegis Test Academic Pathway / Roadmap de las 21 Fases */}
                   <div className="bg-paper-card border border-rule rounded-card p-5 sm:p-6 shadow-xs space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -1271,7 +1271,7 @@ function StudentDashboardContent() {
 
       {/* Footer */}
       <footer className="mt-auto py-5 border-t border-rule text-center text-xs text-ink-muted bg-paper-card">
-        Cambridge Academy © 2026 · Sistema Integral de Evaluaciones y Seguimiento Académico
+        Aegis Test © 2026 · Sistema Integral de Evaluaciones y Seguimiento Académico
       </footer>
     </div>
   );

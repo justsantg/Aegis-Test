@@ -109,7 +109,7 @@ export default function LoginPage() {
       <div className="fixed inset-0 w-full h-full z-0 overflow-hidden pointer-events-none">
         <img
           src="/library-hero.jpg"
-          alt="Cambridge Peabody Library"
+          alt="Aegis Test Library"
           className="w-full h-full object-cover object-center filter brightness-[0.38] saturate-[0.85]"
         />
         <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[1px]" />
@@ -125,7 +125,7 @@ export default function LoginPage() {
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white drop-shadow-sm">
-            Cambridge Academy
+            Aegis Test
           </h1>
 
           <p className="text-xs sm:text-sm text-white/80 max-w-sm mx-auto leading-relaxed">
@@ -192,7 +192,7 @@ export default function LoginPage() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ej. docente@cambridge.edu.co"
+                  placeholder="ej. docente@aegis.edu.co"
                   className="w-full pl-9 pr-3 py-2 text-sm bg-paper border border-rule rounded-btn text-ink placeholder:text-ink-muted/70 focus:outline-none focus:ring-2 focus:ring-accent transition-colors"
                   required
                 />
@@ -290,7 +290,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <footer className="mt-6 text-center text-xs text-white/75">
-          <p>Cambridge Academy © 2026 · Evaluaciones de Gramática, Vocabulario y Sintaxis</p>
+          <p>Aegis Test © 2026 · Evaluaciones de Gramática, Vocabulario y Sintaxis</p>
         </footer>
       </main>
     </div>

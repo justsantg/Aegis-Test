@@ -14,7 +14,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Cambridge Academy — Sistema de Evaluaciones",
+  title: "Aegis Test — Sistema de Evaluaciones",
   description: "Plataforma de evaluación interactiva para academia de idiomas",
 };
 

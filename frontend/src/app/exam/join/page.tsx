@@ -297,7 +297,7 @@ export default function JoinExamPage() {
                       type="email"
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="ej. estudiante@cambridge.edu.co"
+                      placeholder="ej. estudiante@aegis.edu.co"
                       required
                       className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-btn border border-rule bg-paper-card text-ink focus:border-accent"
                     />

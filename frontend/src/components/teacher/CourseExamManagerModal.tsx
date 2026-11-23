@@ -32,6 +32,7 @@ import {
   Play,
   RotateCcw,
   ArrowRight,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface CourseExamManagerModalProps {
@@ -85,6 +86,8 @@ export default function CourseExamManagerModal({
   const [testChosenIndices, setTestChosenIndices] = useState<number[]>([]);
   const [testBankIndices, setTestBankIndices] = useState<number[]>([]);
   const [scrambleSentences, setScrambleSentences] = useState<Record<number, string>>({});
+  const [templateToDelete, setTemplateToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [isDeletingTemplate, setIsDeletingTemplate] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -571,17 +574,19 @@ export default function CourseExamManagerModal({
     }
   };
 
-  const handleDeleteTemplate = async (templateId: string) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar este examen personalizado?')) return;
+  const handleConfirmDeleteTemplate = async () => {
+    if (!templateToDelete) return;
 
     try {
-      setLoading(true);
-      await api.deleteExamTemplate(templateId);
+      setIsDeletingTemplate(true);
+      await api.deleteExamTemplate(templateToDelete.id);
+      setTemplateToDelete(null);
       await loadTemplates();
       if (onExamCreated) onExamCreated();
     } catch (err: any) {
       setError(err.message || 'Error al eliminar el examen');
-      setLoading(false);
+    } finally {
+      setIsDeletingTemplate(false);
     }
   };
 
@@ -807,7 +812,7 @@ export default function CourseExamManagerModal({
                             {isCustom && (
                               <button
                                 type="button"
-                                onClick={() => handleDeleteTemplate(tpl.id)}
+                                onClick={() => setTemplateToDelete({ id: tpl.id, title: tpl.title })}
                                 className="p-1.5 text-danger hover:bg-danger-soft rounded-btn border border-rule hover:border-danger/30 text-xs font-medium cursor-pointer"
                                 title="Eliminar examen personalizado"
                               >
@@ -1675,6 +1680,60 @@ export default function CourseExamManagerModal({
           )}
         </div>
       </div>
+
+      {/* Confirmation Modal to Delete Custom Exam (No browser alert/confirm) */}
+      {templateToDelete && (
+        <div
+          className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => !isDeletingTemplate && setTemplateToDelete(null)}
+        >
+          <div
+            className="bg-paper-card border border-rule rounded-card max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-danger-soft text-danger rounded-full shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-ink">¿Eliminar examen personalizado?</h4>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  ¿Estás seguro de que deseas eliminar <strong className="text-ink font-semibold">&quot;{templateToDelete.title}&quot;</strong>? Esta acción no afectará al examen oficial estandarizado de la coordinación.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-rule">
+              <button
+                type="button"
+                onClick={() => setTemplateToDelete(null)}
+                disabled={isDeletingTemplate}
+                className="px-3.5 py-1.5 bg-paper-card border border-rule text-ink hover:bg-paper-muted rounded-btn text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteTemplate}
+                disabled={isDeletingTemplate}
+                className="px-3.5 py-1.5 bg-danger text-white hover:bg-danger/90 rounded-btn text-xs font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 shadow-xs"
+              >
+                {isDeletingTemplate ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Eliminando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Sí, Eliminar</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

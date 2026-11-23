@@ -400,7 +400,7 @@ export default function CourseRosterModal({
                       : null;
                     const whatsappUrl = cleanPhone
                       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-                          `Hola ${student.firstName || ''}, te contacto desde Cambridge Academy respecto a tu curso ${course.courseName}.`,
+                          `Hola ${student.firstName || ''}, te contacto desde Aegis Test respecto a tu curso ${course.courseName}.`,
                         )}`
                       : null;
 

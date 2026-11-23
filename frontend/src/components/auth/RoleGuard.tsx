@@ -179,7 +179,7 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({
         </div>
 
         <p className="text-[11px] text-ink-muted/70 mt-6">
-          Cambridge Academy © 2026 · Sistema Oficial de Evaluaciones
+          Aegis Test © 2026 · Sistema Oficial de Evaluaciones
         </p>
       </div>
     );

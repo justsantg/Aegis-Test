@@ -95,6 +95,8 @@ export default function AdminDashboardPage() {
   const [newCourseEndTime, setNewCourseEndTime] = useState('12:00:00');
   const [newCourseClassroom, setNewCourseClassroom] = useState('Aula 1');
   const [submittingCourse, setSubmittingCourse] = useState(false);
+  const [courseToDelete, setCourseToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
 
   // Auto-clear messages
   const notifySuccess = (msg: string) => {
@@ -232,20 +234,24 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleDeleteCourse = async (courseId: string, courseName: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar la clase "${courseName}"?`)) return;
+  const handleConfirmDeleteCourse = async () => {
+    if (!courseToDelete) return;
     try {
+      setIsDeletingCourse(true);
       setError(null);
-      await api.deleteCourse(courseId);
-      notifySuccess(`Clase "${courseName}" eliminada correctamente.`);
+      await api.deleteCourse(courseToDelete.id);
+      notifySuccess(`Clase "${courseToDelete.name}" eliminada correctamente.`);
       const [updatedCourses, updatedTeachers] = await Promise.all([
         api.getCourses(),
         api.getTeachers(),
       ]);
       setCourses(updatedCourses);
       setTeachers(updatedTeachers);
+      setCourseToDelete(null);
     } catch (err: any) {
       setError(err.message || 'Error al eliminar el curso.');
+    } finally {
+      setIsDeletingCourse(false);
     }
   };
 
@@ -272,7 +278,7 @@ export default function AdminDashboardPage() {
           <div>
             <div className="flex items-center space-x-2 text-xs font-semibold text-accent mb-1">
               <ShieldCheck className="w-4 h-4 text-accent" />
-              <span>Cambridge Academy · Portal de Administración Oficial</span>
+              <span>Aegis Test · Portal de Administración Oficial</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-ink">
               Gestión Académica & Auditoría de Exámenes
@@ -865,7 +871,7 @@ export default function AdminDashboardPage() {
                             <td className="py-3 px-4 text-right">
                               <button
                                 type="button"
-                                onClick={() => handleDeleteCourse(c.id, c.courseName)}
+                                onClick={() => setCourseToDelete({ id: c.id, name: c.courseName })}
                                 className="p-1.5 text-danger hover:bg-danger-soft rounded-btn transition-colors cursor-pointer"
                                 title="Eliminar clase"
                               >
@@ -934,7 +940,7 @@ export default function AdminDashboardPage() {
                   type="email"
                   value={newTeacherEmail}
                   onChange={(e) => setNewTeacherEmail(e.target.value)}
-                  placeholder="ej. laura.gomez@cambridge.edu.co"
+                  placeholder="ej. laura.gomez@aegis.edu.co"
                   className="w-full p-2 bg-paper border border-rule rounded-btn text-ink focus:ring-1 focus:ring-accent"
                   required
                 />
@@ -1158,6 +1164,60 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal de Confirmación para Eliminar Curso (Reemplazo de dialog confirm nativo) */}
+      {courseToDelete && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => !isDeletingCourse && setCourseToDelete(null)}
+        >
+          <div
+            className="bg-paper-card border border-rule rounded-card max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-danger-soft text-danger rounded-full shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-ink">¿Eliminar clase?</h4>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  ¿Estás seguro de que deseas eliminar la clase{' '}
+                  <strong className="text-ink font-semibold">&quot;{courseToDelete.name}&quot;</strong>? Esta acción no se puede deshacer.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-rule">
+              <button
+                type="button"
+                onClick={() => setCourseToDelete(null)}
+                disabled={isDeletingCourse}
+                className="px-3.5 py-1.5 bg-paper-card border border-rule text-ink hover:bg-paper-muted rounded-btn text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteCourse}
+                disabled={isDeletingCourse}
+                className="px-3.5 py-1.5 bg-danger text-white hover:bg-danger/90 rounded-btn text-xs font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 shadow-xs"
+              >
+                {isDeletingCourse ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Eliminando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Sí, Eliminar</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
