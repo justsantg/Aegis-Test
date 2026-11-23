@@ -19,6 +19,8 @@ import {
   Phone,
   CheckCircle2,
   AlertCircle,
+  Search,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface CourseRosterModalProps {
@@ -35,6 +37,9 @@ export default function CourseRosterModal({
   const [roster, setRoster] = useState<any[]>([]);
   const [allStudents, setAllStudents] = useState<RegisteredStudentData[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [studentToUnenroll, setStudentToUnenroll] = useState<{ id: number; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
@@ -72,6 +77,18 @@ export default function CourseRosterModal({
     (s) => !enrolledStudentIds.has(s.id),
   );
 
+  const filteredAvailableStudents = availableStudents.filter((s) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      s.fullName?.toLowerCase().includes(term) ||
+      s.email?.toLowerCase().includes(term) ||
+      (s.studentCode && s.studentCode.toLowerCase().includes(term))
+    );
+  });
+
+  const selectedStudent = allStudents.find((s) => String(s.id) === selectedStudentId);
+
   const handleEnroll = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudentId) return;
@@ -93,6 +110,8 @@ export default function CourseRosterModal({
         `¡${studentObj?.fullName || 'Estudiante'} matriculado exitosamente en ${course.courseName}!`,
       );
       setSelectedStudentId('');
+      setSearchTerm('');
+      setIsDropdownOpen(false);
       await loadData();
       if (onRosterChanged) onRosterChanged();
     } catch (err: any) {
@@ -102,22 +121,16 @@ export default function CourseRosterModal({
     }
   };
 
-  const handleUnenroll = async (studentId: number, studentName: string) => {
-    if (
-      !confirm(
-        `¿Confirmas retirar a "${studentName}" de este curso?`,
-      )
-    ) {
-      return;
-    }
-
+  const handleConfirmUnenroll = async () => {
+    if (!studentToUnenroll) return;
     setError(null);
     setSuccessMsg(null);
 
     try {
-      setRemovingId(studentId);
-      await api.unenrollStudent(course.id, studentId);
-      setSuccessMsg(`Se retiró a "${studentName}" del curso.`);
+      setRemovingId(studentToUnenroll.id);
+      await api.unenrollStudent(course.id, studentToUnenroll.id);
+      setSuccessMsg(`Se retiró a "${studentToUnenroll.name}" del curso.`);
+      setStudentToUnenroll(null);
       await loadData();
       if (onRosterChanged) onRosterChanged();
     } catch (err: any) {
@@ -191,40 +204,133 @@ export default function CourseRosterModal({
           </div>
         )}
 
-        {/* Section 1: Enroll registered student */}
+        {/* Section 1: Enroll registered student (Searchable Autocomplete Field) */}
         <div className="p-4 bg-paper-muted/60 border border-rule rounded-card space-y-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-ink">
-            <UserPlus className="w-4 h-4 text-accent" />
-            <span>Matricular Alumno Registrado en este Curso</span>
+          <div className="flex items-center justify-between text-xs font-bold text-ink">
+            <div className="flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-accent" />
+              <span>Matricular Alumno Registrado en este Curso</span>
+            </div>
+            <span className="text-[11px] font-normal text-ink-muted">
+              {availableStudents.length} disponibles para matricular
+            </span>
           </div>
 
           <form onSubmit={handleEnroll} className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
-            <div className="flex-1">
-              <select
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                disabled={loading || enrolling || roster.length >= capacity}
-                className="w-full text-xs font-medium px-3 py-2.5 rounded-btn border border-rule bg-paper-card text-ink focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-50"
-              >
-                <option value="">
-                  {roster.length >= capacity
-                    ? 'Capacidad máxima alcanzada'
-                    : availableStudents.length === 0
-                    ? 'No hay más alumnos registrados disponibles para matricular'
-                    : `-- Seleccionar estudiante registrado (${availableStudents.length} disponibles) --`}
-                </option>
-                {availableStudents.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.fullName} — {s.studentCode || 'Sin código'} ({s.email})
-                  </option>
-                ))}
-              </select>
+            <div className="relative flex-1">
+              {selectedStudent ? (
+                // Selected student badge / chip preview
+                <div className="flex items-center justify-between px-3 py-2 bg-paper-card border border-accent rounded-btn text-xs animate-in fade-in duration-100">
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    <div className="w-7 h-7 rounded-full bg-accent text-accent-ink font-bold flex items-center justify-center text-xs shrink-0">
+                      {selectedStudent.firstName?.[0] || 'E'}
+                      {selectedStudent.lastName?.[0] || 'S'}
+                    </div>
+                    <div className="truncate">
+                      <span className="font-bold text-ink">{selectedStudent.fullName}</span>
+                      <span className="text-ink-muted ml-2 text-[11px]">({selectedStudent.email})</span>
+                      {selectedStudent.studentCode && (
+                        <span className="ml-1.5 font-mono text-[10px] px-1.5 py-0.5 bg-paper-muted border border-rule rounded text-accent font-bold">
+                          {selectedStudent.studentCode}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStudentId('');
+                      setSearchTerm('');
+                    }}
+                    className="p-1 text-ink-muted hover:text-danger rounded-btn transition-colors cursor-pointer shrink-0 ml-2"
+                    title="Cambiar selección de estudiante"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                // Searchable text input
+                <div className="relative">
+                  <Search className="w-4 h-4 text-ink-muted absolute left-3 top-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsDropdownOpen(true)}
+                    disabled={loading || enrolling || roster.length >= capacity}
+                    placeholder={
+                      roster.length >= capacity
+                        ? 'Capacidad máxima del curso alcanzada'
+                        : availableStudents.length === 0
+                        ? 'No hay más alumnos registrados disponibles'
+                        : 'Escribe el nombre o correo del estudiante...'
+                    }
+                    className="w-full text-xs font-medium pl-9 pr-8 py-2.5 rounded-btn border border-rule bg-paper-card text-ink focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-50"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2.5 top-2.5 text-ink-muted hover:text-ink cursor-pointer p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {/* Dropdown Results Menu */}
+                  {isDropdownOpen && !selectedStudent && availableStudents.length > 0 && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setIsDropdownOpen(false)}
+                      />
+                      <div className="absolute left-0 right-0 top-full mt-1.5 z-20 bg-paper-card border border-rule rounded-card shadow-xl max-h-60 overflow-y-auto divide-y divide-rule animate-in fade-in zoom-in-95 duration-100">
+                        {filteredAvailableStudents.length === 0 ? (
+                          <div className="p-3 text-center text-ink-muted text-xs">
+                            No se encontraron estudiantes para &quot;{searchTerm}&quot;
+                          </div>
+                        ) : (
+                          filteredAvailableStudents.map((s) => (
+                            <div
+                              key={s.id}
+                              onClick={() => {
+                                setSelectedStudentId(String(s.id));
+                                setIsDropdownOpen(false);
+                              }}
+                              className="p-2.5 hover:bg-paper-muted cursor-pointer transition-colors flex items-center justify-between text-xs"
+                            >
+                              <div className="flex items-center gap-2.5 overflow-hidden">
+                                <div className="w-7 h-7 rounded-full bg-accent-soft text-accent font-bold flex items-center justify-center text-xs shrink-0">
+                                  {s.firstName?.[0] || 'E'}
+                                  {s.lastName?.[0] || 'S'}
+                                </div>
+                                <div className="overflow-hidden">
+                                  <div className="font-bold text-ink truncate">{s.fullName}</div>
+                                  <div className="text-[11px] text-ink-muted truncate">{s.email}</div>
+                                </div>
+                              </div>
+                              {s.studentCode && (
+                                <span className="font-mono text-[10px] px-1.5 py-0.5 bg-paper-muted border border-rule rounded text-accent font-bold shrink-0 ml-2">
+                                  {s.studentCode}
+                                </span>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             <button
               type="submit"
               disabled={!selectedStudentId || enrolling || roster.length >= capacity}
-              className="px-4 py-2.5 bg-accent text-accent-ink hover:bg-accent-hover font-semibold text-xs rounded-btn inline-flex items-center justify-center gap-1.5 disabled:opacity-50 transition-[background-color] cursor-pointer shrink-0"
+              className="px-4 py-2.5 bg-accent text-accent-ink hover:bg-accent-hover font-semibold text-xs rounded-btn inline-flex items-center justify-center gap-1.5 disabled:opacity-50 transition-[background-color] cursor-pointer shrink-0 shadow-xs"
             >
               {enrolling ? (
                 <>
@@ -360,7 +466,7 @@ export default function CourseRosterModal({
                         <td className="py-3 px-3 text-right">
                           <button
                             type="button"
-                            onClick={() => handleUnenroll(student.id, fullName)}
+                            onClick={() => setStudentToUnenroll({ id: student.id, name: fullName })}
                             disabled={removingId === student.id}
                             className="p-1.5 text-danger/70 hover:text-danger hover:bg-danger-soft rounded-btn transition-[color,background-color] cursor-pointer disabled:opacity-50"
                             title={`Retirar a ${fullName} de este curso`}
@@ -395,6 +501,62 @@ export default function CourseRosterModal({
           </button>
         </div>
       </div>
+
+      {/* Confirmation Modal to Unenroll Student (No browser alert) */}
+      {studentToUnenroll && (
+        <div 
+          className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => !removingId && setStudentToUnenroll(null)}
+        >
+          <div 
+            className="bg-paper-card border border-rule rounded-card max-w-sm w-full p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-danger-soft text-danger rounded-full shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-ink">
+                  ¿Retirar a este estudiante?
+                </h4>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  ¿Confirmas retirar a <strong className="text-ink font-semibold">{studentToUnenroll.name}</strong> de <strong className="text-ink">{course.courseName}</strong>? Podrás volver a matricularlo cuando desees.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-rule">
+              <button
+                type="button"
+                onClick={() => setStudentToUnenroll(null)}
+                disabled={removingId !== null}
+                className="px-3.5 py-1.5 bg-paper-card border border-rule text-ink hover:bg-paper-muted rounded-btn text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmUnenroll}
+                disabled={removingId !== null}
+                className="px-3.5 py-1.5 bg-danger text-white hover:bg-danger/90 rounded-btn text-xs font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 shadow-xs"
+              >
+                {removingId !== null ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Retirando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Sí, Retirar</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

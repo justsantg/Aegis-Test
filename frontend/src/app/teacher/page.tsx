@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -32,6 +32,7 @@ import {
   Mail,
   Phone,
   UserPlus,
+  Layers,
 } from 'lucide-react';
 import RoleGuard from '../../components/auth/RoleGuard';
 import CourseExamManagerModal from '../../components/teacher/CourseExamManagerModal';
@@ -96,6 +97,8 @@ export default function TeacherDashboardPage() {
   const [rosterCourse, setRosterCourse] = useState<Course | null>(null);
   const [activeTab, setActiveTab] = useState<'COURSES' | 'STUDENTS'>('COURSES');
   const [students, setStudents] = useState<RegisteredStudentData[]>([]);
+  const [allTeacherCourses, setAllTeacherCourses] = useState<Course[]>([]);
+  const [selectedPhaseFilter, setSelectedPhaseFilter] = useState<string>('ALL');
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentSearch, setStudentSearch] = useState('');
 
@@ -120,6 +123,24 @@ export default function TeacherDashboardPage() {
     }
   };
 
+  const loadAllTeacherCourses = async (
+    user?: AuthUser | null,
+    teacherFilter?: string,
+  ) => {
+    try {
+      const params: { teacherId?: number } = {};
+      if (user?.role?.id === 2) {
+        params.teacherId = user.id;
+      } else if (user?.role?.id === 1 && teacherFilter) {
+        params.teacherId = Number(teacherFilter);
+      }
+      const data = await api.getCourses(params);
+      setAllTeacherCourses(data);
+    } catch (err: any) {
+      console.error('Error al cargar cursos para fases:', err);
+    }
+  };
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem('cambridge_user');
@@ -138,6 +159,7 @@ export default function TeacherDashboardPage() {
   useEffect(() => {
     if (!userLoaded) return;
     loadCourses(selectedDay, currentUser, adminTeacherId);
+    loadAllTeacherCourses(currentUser, adminTeacherId);
   }, [selectedDay, userLoaded, currentUser?.id, adminTeacherId]);
 
   const loadCourses = async (
@@ -214,16 +236,83 @@ export default function TeacherDashboardPage() {
     }
   };
 
-  const filteredStudents = students.filter((s) => {
-    if (!studentSearch.trim()) return true;
-    const q = studentSearch.toLowerCase();
-    return (
-      s.fullName?.toLowerCase().includes(q) ||
-      s.studentCode?.toLowerCase().includes(q) ||
-      s.email?.toLowerCase().includes(q) ||
-      s.phoneNumber?.toLowerCase().includes(q)
+  // Unique phases/levels assigned to this teacher
+  const assignedPhases = useMemo(() => {
+    const map = new Map<
+      number,
+      {
+        levelId: number;
+        levelName: string;
+        levelCode: string;
+        courses: Course[];
+      }
+    >();
+
+    allTeacherCourses.forEach((c) => {
+      if (c.level) {
+        if (!map.has(c.level.id)) {
+          map.set(c.level.id, {
+            levelId: c.level.id,
+            levelName: c.level.name,
+            levelCode: c.level.code || c.level.name,
+            courses: [c],
+          });
+        } else {
+          map.get(c.level.id)!.courses.push(c);
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.levelName.localeCompare(b.levelName),
     );
-  });
+  }, [allTeacherCourses]);
+
+  const searchedStudents = useMemo(() => {
+    if (!studentSearch.trim()) return students;
+    const term = studentSearch.toLowerCase();
+    return students.filter(
+      (s) =>
+        s.fullName?.toLowerCase().includes(term) ||
+        s.email?.toLowerCase().includes(term) ||
+        (s.studentCode && s.studentCode.toLowerCase().includes(term)) ||
+        (s.phoneNumber && s.phoneNumber.includes(term)),
+    );
+  }, [students, studentSearch]);
+
+  const phaseSections = useMemo(() => {
+    return assignedPhases.map((phase) => {
+      const phaseStudents = searchedStudents.filter((student) =>
+        student.enrolledCourses?.some(
+          (c) =>
+            c.levelId === phase.levelId ||
+            c.levelName === phase.levelName ||
+            phase.courses.some((pc) => pc.id === c.id),
+        ),
+      );
+
+      return {
+        ...phase,
+        students: phaseStudents,
+      };
+    });
+  }, [assignedPhases, searchedStudents]);
+
+  const unassignedStudents = useMemo(() => {
+    return searchedStudents.filter(
+      (s) => !s.enrolledCourses || s.enrolledCourses.length === 0,
+    );
+  }, [searchedStudents]);
+
+  const totalAssignedStudentsCount = useMemo(() => {
+    const studentIds = new Set<number>();
+    phaseSections.forEach((sec) => {
+      sec.students.forEach((s) => studentIds.add(s.id));
+    });
+    return studentIds.size;
+  }, [phaseSections]);
+
+  const filteredStudents = searchedStudents;
 
   const isAdmin = currentUser?.role?.id === 1;
 
@@ -362,7 +451,7 @@ export default function TeacherDashboardPage() {
             }`}
           >
             <GraduationCap className="w-3.5 h-3.5" />
-            <span>Directorio de Estudiantes Registrados ({students.length})</span>
+            <span>Directorio de Estudiantes ({totalAssignedStudentsCount})</span>
           </button>
         </div>
 
@@ -513,9 +602,9 @@ export default function TeacherDashboardPage() {
           </div>
         )}
 
-        {/* Student Directory View */}
+        {/* Student Directory View - Separated by Assigned Phases */}
         {activeTab === 'STUDENTS' && (
-          <div className="mt-6 space-y-4">
+          <div className="mt-6 space-y-6">
             {/* Search and Stats Bar */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-paper-card border border-rule rounded-card p-4 shadow-xs">
               <div className="relative flex-1 max-w-md">
@@ -531,159 +620,375 @@ export default function TeacherDashboardPage() {
 
               <div className="flex items-center gap-3 text-xs text-ink-muted">
                 <span>
-                  Total Registrados: <strong className="text-ink">{students.length}</strong>
+                  Fases Asignadas: <strong className="text-ink font-bold">{assignedPhases.length}</strong>
                 </span>
                 <span>·</span>
                 <span>
-                  Con Clases Activas:{' '}
-                  <strong className="text-ink">
-                    {students.filter((s) => s.enrolledCoursesCount > 0).length}
+                  Estudiantes en mis Fases:{' '}
+                  <strong className="text-ink font-bold">
+                    {totalAssignedStudentsCount}
                   </strong>
                 </span>
               </div>
             </div>
 
-            {/* Students Table */}
+            {/* Filter Pills for Assigned Phases */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-ink-muted mr-1 flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-accent" />
+                <span>Fases Asignadas:</span>
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setSelectedPhaseFilter('ALL')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-btn transition-[background-color,color] cursor-pointer ${
+                  selectedPhaseFilter === 'ALL'
+                    ? 'bg-ink text-paper shadow-xs'
+                    : 'bg-paper-card border border-rule text-ink-muted hover:text-ink hover:bg-paper-muted'
+                }`}
+              >
+                Todas mis Fases ({totalAssignedStudentsCount})
+              </button>
+
+              {phaseSections.map((sec) => (
+                <button
+                  key={sec.levelId}
+                  type="button"
+                  onClick={() => setSelectedPhaseFilter(String(sec.levelId))}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-btn transition-[background-color,color] cursor-pointer flex items-center gap-1.5 ${
+                    selectedPhaseFilter === String(sec.levelId)
+                      ? 'bg-ink text-paper shadow-xs'
+                      : 'bg-paper-card border border-rule text-ink-muted hover:text-ink hover:bg-paper-muted'
+                  }`}
+                >
+                  <span>{sec.levelName}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                      selectedPhaseFilter === String(sec.levelId)
+                        ? 'bg-paper/20 text-paper font-bold'
+                        : 'bg-accent-soft text-accent font-bold'
+                    }`}
+                  >
+                    {sec.students.length}
+                  </span>
+                </button>
+              ))}
+
+              {unassignedStudents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedPhaseFilter('UNASSIGNED')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-btn transition-[background-color,color] cursor-pointer flex items-center gap-1.5 ${
+                    selectedPhaseFilter === 'UNASSIGNED'
+                      ? 'bg-ink text-paper shadow-xs'
+                      : 'bg-paper-card border border-rule text-ink-muted hover:text-ink hover:bg-paper-muted'
+                  }`}
+                >
+                  <span>Sin Fase Asignada</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-warning-soft text-warning font-bold">
+                    {unassignedStudents.length}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Students Content */}
             {studentsLoading ? (
               <div className="py-16 text-center text-ink-muted text-xs flex items-center justify-center gap-2">
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Cargando directorio de estudiantes...</span>
+                <span>Cargando estudiantes por fase...</span>
               </div>
-            ) : filteredStudents.length === 0 ? (
+            ) : assignedPhases.length === 0 ? (
               <div className="p-12 text-center bg-paper-card border border-rule rounded-card text-ink-muted text-xs space-y-1">
                 <p className="font-semibold text-ink">
-                  {studentSearch
-                    ? 'No se encontraron estudiantes para la búsqueda ingresada.'
-                    : 'No hay estudiantes registrados en la plataforma.'}
+                  No tienes fases o cursos asignados actualmente.
                 </p>
-                {studentSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setStudentSearch('')}
-                    className="text-accent hover:underline font-semibold cursor-pointer"
-                  >
-                    Limpiar filtro de búsqueda
-                  </button>
-                )}
+                <p className="text-[11px] text-ink-muted">
+                  Cuando la coordinación académica te asigne cursos o niveles, aquí verás los estudiantes matriculados organizados por fase.
+                </p>
               </div>
             ) : (
-              <div className="bg-paper-card border border-rule rounded-card overflow-hidden shadow-xs">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-rule bg-paper-muted text-ink-muted font-semibold">
-                      <th className="py-3 px-4">Estudiante Registrado</th>
-                      <th className="py-3 px-4">Código Institucional</th>
-                      <th className="py-3 px-4">Correo</th>
-                      <th className="py-3 px-4">Teléfono / WhatsApp</th>
-                      <th className="py-3 px-4">Cursos Matriculados</th>
-                      <th className="py-3 px-4 text-right">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-rule">
-                    {filteredStudents.map((student) => {
-                      const cleanPhone = student.phoneNumber
-                        ? student.phoneNumber.replace(/[^0-9]/g, '')
-                        : null;
-                      const whatsappUrl = cleanPhone
-                        ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-                            `Hola ${student.firstName}, te contacto desde Cambridge Academy.`,
-                          )}`
-                        : null;
+              <div className="space-y-6">
+                {/* Render Phase Sections */}
+                {phaseSections
+                  .filter(
+                    (sec) =>
+                      selectedPhaseFilter === 'ALL' ||
+                      selectedPhaseFilter === String(sec.levelId),
+                  )
+                  .map((sec) => (
+                    <div
+                      key={sec.levelId}
+                      className="bg-paper-card border border-rule rounded-card overflow-hidden shadow-xs space-y-0"
+                    >
+                      {/* Phase Header */}
+                      <div className="p-4 bg-paper-muted/60 border-b border-rule flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 bg-accent text-accent-ink text-xs font-bold rounded shadow-xs">
+                              {sec.levelName}
+                            </span>
+                            <span className="text-xs text-ink-muted">
+                              {sec.courses.length}{' '}
+                              {sec.courses.length === 1
+                                ? 'curso asignado'
+                                : 'cursos asignados'}
+                              :{' '}
+                              <strong className="text-ink">
+                                {sec.courses.map((c) => c.courseName).join(', ')}
+                              </strong>
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-ink-muted">
+                            {sec.students.length}{' '}
+                            {sec.students.length === 1
+                              ? 'estudiante registrado en esta fase'
+                              : 'estudiantes registrados en esta fase'}
+                          </p>
+                        </div>
 
-                      return (
-                        <tr
-                          key={student.id}
-                          className="hover:bg-paper-muted/50 transition-[background-color]"
-                        >
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-full bg-accent-soft text-accent font-bold flex items-center justify-center text-xs shrink-0">
-                                {student.firstName?.[0] || 'E'}
-                                {student.lastName?.[0] || 'S'}
-                              </div>
-                              <div>
-                                <div className="font-bold text-ink">
-                                  {student.fullName}
-                                </div>
-                                <div className="text-[11px] text-ink-muted">
-                                  Registrado: {new Date(student.createdAt).toLocaleDateString()}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
+                        {sec.courses.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setRosterCourse(sec.courses[0])}
+                            className="px-3 py-1.5 bg-accent text-accent-ink hover:bg-accent-hover text-xs font-semibold rounded-btn inline-flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0 self-start sm:self-auto transition-[background-color]"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>Matricular en {sec.levelCode}</span>
+                          </button>
+                        )}
+                      </div>
 
-                          <td className="py-3 px-4 font-mono font-bold text-accent">
-                            {student.studentCode || (
-                              <span className="text-ink-muted/50 font-normal italic">
-                                Sin código
-                              </span>
-                            )}
-                          </td>
+                      {/* Phase Table */}
+                      {sec.students.length === 0 ? (
+                        <div className="p-8 text-center text-ink-muted text-xs space-y-2">
+                          <Users className="w-8 h-8 text-ink-muted mx-auto opacity-40" />
+                          <p className="font-semibold text-ink">
+                            No hay estudiantes matriculados en {sec.levelName} todavía.
+                          </p>
+                          <p className="text-[11px] text-ink-muted">
+                            Puedes matricular estudiantes registrados usando el botón superior.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="border-b border-rule bg-paper-muted/30 text-ink-muted font-semibold">
+                                <th className="py-2.5 px-4">Estudiante Registrado</th>
+                                <th className="py-2.5 px-4">Código Institucional</th>
+                                <th className="py-2.5 px-4">Correo</th>
+                                <th className="py-2.5 px-4">Teléfono / WhatsApp</th>
+                                <th className="py-2.5 px-4">Curso en esta Fase</th>
+                                <th className="py-2.5 px-4 text-right">Acción</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-rule">
+                              {sec.students.map((student) => {
+                                const cleanPhone = student.phoneNumber
+                                  ? student.phoneNumber.replace(/[^0-9]/g, '')
+                                  : null;
+                                const whatsappUrl = cleanPhone
+                                  ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
+                                      `Hola ${student.firstName}, te contacto desde Cambridge Academy respecto a tu curso de ${sec.levelName}.`,
+                                    )}`
+                                  : null;
 
-                          <td className="py-3 px-4 text-ink-muted">
-                            <div className="flex items-center gap-1">
-                              <Mail className="w-3 h-3 opacity-60" />
-                              <span>{student.email}</span>
-                            </div>
-                          </td>
+                                const phaseCourse = student.enrolledCourses?.find(
+                                  (c) =>
+                                    c.levelId === sec.levelId ||
+                                    c.levelName === sec.levelName ||
+                                    sec.courses.some((pc) => pc.id === c.id),
+                                );
+                                const targetCourseObj =
+                                  sec.courses.find(
+                                    (c) => c.id === phaseCourse?.id,
+                                  ) || sec.courses[0];
 
-                          <td className="py-3 px-4">
-                            {whatsappUrl ? (
-                              <a
-                                href={whatsappUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center px-2 py-1 bg-success-soft text-success hover:bg-success hover:text-paper font-semibold rounded text-[11px] transition-[background-color,color] gap-1 cursor-pointer"
-                                title="Contactar por WhatsApp"
-                              >
-                                <MessageCircle className="w-3 h-3" />
-                                <span>{student.phoneNumber}</span>
-                                <ExternalLink className="w-2.5 h-2.5 opacity-60" />
-                              </a>
-                            ) : (
-                              <span className="text-ink-muted/50 italic text-[11px]">
-                                Sin teléfono
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="py-3 px-4">
-                            {student.enrolledCourses?.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {student.enrolledCourses.map((c) => (
-                                  <span
-                                    key={c.id}
-                                    className="px-2 py-0.5 bg-paper-muted text-ink border border-rule rounded text-[10px] font-medium"
+                                return (
+                                  <tr
+                                    key={student.id}
+                                    className="hover:bg-paper-muted/40 transition-[background-color]"
                                   >
-                                    {c.courseName} ({c.levelName})
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-ink-muted/50 italic text-[11px]">
-                                Sin matrícula activa
-                              </span>
-                            )}
-                          </td>
+                                    <td className="py-2.5 px-4">
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="w-7 h-7 rounded-full bg-accent-soft text-accent font-bold flex items-center justify-center text-xs shrink-0">
+                                          {student.firstName?.[0] || 'E'}
+                                          {student.lastName?.[0] || 'S'}
+                                        </div>
+                                        <div>
+                                          <div className="font-bold text-ink">
+                                            {student.fullName}
+                                          </div>
+                                          <div className="text-[10px] text-ink-muted">
+                                            Registrado:{' '}
+                                            {new Date(
+                                              student.createdAt,
+                                            ).toLocaleDateString()}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
 
-                          <td className="py-3 px-4 text-right">
-                            {courses.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => setRosterCourse(courses[0])}
-                                className="px-2.5 py-1 bg-paper border border-rule hover:border-rule-strong text-ink hover:text-accent font-semibold rounded text-[11px] inline-flex items-center gap-1 cursor-pointer transition-[border-color,color]"
-                                title="Abrir gestión de matrículas"
-                              >
-                                <UserPlus className="w-3 h-3 text-accent" />
-                                <span>Gestionar Matrícula</span>
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                                    <td className="py-2.5 px-4 font-mono font-bold text-accent">
+                                      {student.studentCode || (
+                                        <span className="text-ink-muted/50 font-normal italic">
+                                          Sin código
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    <td className="py-2.5 px-4 text-ink-muted">
+                                      <div className="flex items-center gap-1">
+                                        <Mail className="w-3 h-3 opacity-60" />
+                                        <span>{student.email}</span>
+                                      </div>
+                                    </td>
+
+                                    <td className="py-2.5 px-4">
+                                      {whatsappUrl ? (
+                                        <a
+                                          href={whatsappUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center px-2 py-0.5 bg-success-soft text-success hover:bg-success hover:text-paper font-semibold rounded text-[11px] transition-[background-color,color] gap-1 cursor-pointer"
+                                          title="Contactar por WhatsApp"
+                                        >
+                                          <MessageCircle className="w-3 h-3" />
+                                          <span>{student.phoneNumber}</span>
+                                          <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                                        </a>
+                                      ) : (
+                                        <span className="text-ink-muted/50 italic text-[11px]">
+                                          Sin teléfono
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    <td className="py-2.5 px-4">
+                                      {phaseCourse ? (
+                                        <span className="px-2 py-0.5 bg-paper-muted text-ink border border-rule rounded text-[10px] font-medium">
+                                          {phaseCourse.courseName}
+                                        </span>
+                                      ) : (
+                                        <span className="text-ink-muted/50 italic text-[10px]">
+                                          Matriculado en la fase
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    <td className="py-2.5 px-4 text-right">
+                                      {targetCourseObj && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setRosterCourse(targetCourseObj)
+                                          }
+                                          className="px-2.5 py-1 bg-paper border border-rule hover:border-rule-strong text-ink hover:text-accent font-semibold rounded text-[11px] inline-flex items-center gap-1 cursor-pointer transition-[border-color,color]"
+                                          title="Abrir lista y matrícula de este curso"
+                                        >
+                                          <UserPlus className="w-3 h-3 text-accent" />
+                                          <span>Gestionar Matrícula</span>
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                {/* Section for Unassigned Registered Students (if active or ALL) */}
+                {(selectedPhaseFilter === 'UNASSIGNED' ||
+                  (selectedPhaseFilter === 'ALL' &&
+                    unassignedStudents.length > 0)) && (
+                  <div className="bg-paper-card border border-rule rounded-card overflow-hidden shadow-xs space-y-0">
+                    <div className="p-4 bg-paper-muted/60 border-b border-rule flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 bg-warning-soft text-warning text-xs font-bold rounded">
+                            Disponibles para Matricular
+                          </span>
+                          <span className="text-xs font-bold text-ink">
+                            Estudiantes Registrados Sin Fase Asignada
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-ink-muted mt-0.5">
+                          Alumnos registrados en Cambridge Academy que aún no tienen ningún curso o fase asignada
+                        </p>
+                      </div>
+
+                      {allTeacherCourses.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setRosterCourse(allTeacherCourses[0])}
+                          className="px-3 py-1.5 bg-paper border border-rule hover:border-rule-strong text-ink font-semibold rounded-btn text-xs inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <UserPlus className="w-3.5 h-3.5 text-accent" />
+                          <span>Matricular en un Curso</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-rule bg-paper-muted/30 text-ink-muted font-semibold">
+                            <th className="py-2.5 px-4">Estudiante</th>
+                            <th className="py-2.5 px-4">Código Institucional</th>
+                            <th className="py-2.5 px-4">Correo</th>
+                            <th className="py-2.5 px-4">Teléfono</th>
+                            <th className="py-2.5 px-4 text-right">Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-rule">
+                          {unassignedStudents.map((student) => (
+                            <tr
+                              key={student.id}
+                              className="hover:bg-paper-muted/40 transition-[background-color]"
+                            >
+                              <td className="py-2.5 px-4 font-bold text-ink">
+                                {student.fullName}
+                              </td>
+                              <td className="py-2.5 px-4 font-mono font-bold text-accent">
+                                {student.studentCode || (
+                                  <span className="text-ink-muted/50 font-normal italic">
+                                    Sin código
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-4 text-ink-muted">
+                                {student.email}
+                              </td>
+                              <td className="py-2.5 px-4 text-ink-muted">
+                                {student.phoneNumber || '---'}
+                              </td>
+                              <td className="py-2.5 px-4 text-right">
+                                {allTeacherCourses.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setRosterCourse(allTeacherCourses[0])
+                                    }
+                                    className="px-2.5 py-1 bg-accent text-accent-ink hover:bg-accent-hover font-semibold rounded text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <UserPlus className="w-3 h-3" />
+                                    <span>Asignar a Fase</span>
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -846,6 +1151,7 @@ export default function TeacherDashboardPage() {
             onClose={() => setRosterCourse(null)}
             onRosterChanged={() => {
               loadCourses(selectedDay, currentUser, adminTeacherId);
+              loadAllTeacherCourses(currentUser, adminTeacherId);
               loadStudents();
             }}
           />

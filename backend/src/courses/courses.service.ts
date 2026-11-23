@@ -266,7 +266,7 @@ export class CoursesService {
 
     const enrollments = await this.enrollmentRepository.find({
       where: { enrollmentStatus: EnrollmentStatusEnum.ACTIVE },
-      relations: ['course', 'course.level', 'student'],
+      relations: ['course', 'course.level', 'course.teacher', 'student'],
     });
 
     return students.map((student) => {
@@ -290,7 +290,11 @@ export class CoursesService {
         enrolledCourses: studentEnrollments.map((e) => ({
           id: e.course?.id,
           courseName: e.course?.courseName,
+          levelId: e.course?.level?.id,
+          levelCode: e.course?.level?.code,
           levelName: e.course?.level?.name,
+          levelType: e.course?.level?.levelType,
+          teacherId: e.course?.teacher?.id,
           courseModality: e.course?.courseModality,
           scheduleDays: e.course?.scheduleDays,
           startTime: e.course?.startTime,

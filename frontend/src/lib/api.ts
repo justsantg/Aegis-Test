@@ -230,7 +230,11 @@ export interface RegisteredStudentData {
   enrolledCourses: {
     id: string;
     courseName: string;
+    levelId?: number;
+    levelCode?: string;
     levelName?: string;
+    levelType?: string;
+    teacherId?: number;
     courseModality?: string;
     scheduleDays?: string[];
     startTime?: string;
