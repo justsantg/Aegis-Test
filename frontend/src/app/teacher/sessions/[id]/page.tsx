@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -49,6 +50,22 @@ export default function TeacherSessionMonitorPage() {
 
   // Fullscreen classroom projector
   const [isProjectorFullscreen, setIsProjectorFullscreen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock body scroll when in fullscreen to prevent double scrollbars and background shifts
+  useEffect(() => {
+    if (isProjectorFullscreen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isProjectorFullscreen]);
 
   // Modals
   const [showConfirmFinishModal, setShowConfirmFinishModal] = useState(false);
@@ -875,28 +892,28 @@ export default function TeacherSessionMonitorPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* FULLSCREEN CLASSROOM PROJECTOR MODE (BEAM / TV PRESENTATION)              */}
+        {/* FULLSCREEN CLASSROOM PROJECTOR (PORTAL DIRECTLY TO BODY - LIGHT MODE)     */}
         {/* ========================================================================= */}
-        {isProjectorFullscreen && (
-          <div className="fixed inset-0 z-60 bg-slate-950 text-white flex flex-col p-6 sm:p-10 overflow-y-auto animate-in fade-in duration-200">
-            {/* Top Bar (Clean, NO PIN) */}
-            <div className="flex items-center justify-between pb-6 border-b border-slate-800 gap-4">
+        {isProjectorFullscreen && mounted && createPortal(
+          <div className="fixed inset-0 z-[9999] w-screen h-screen bg-paper text-ink flex flex-col overflow-y-auto overscroll-contain animate-in fade-in duration-150">
+            {/* Sticky Top Bar in Light Editorial Mode */}
+            <header className="sticky top-0 z-20 bg-paper-card/95 backdrop-blur-xs border-b border-rule px-6 sm:px-10 py-4 flex items-center justify-between gap-4 shadow-xs">
               <div className="flex items-center gap-3">
-                <span className="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded uppercase tracking-wider">
+                <span className="px-3 py-1 bg-accent text-accent-ink text-xs font-bold rounded shadow-xs uppercase tracking-wider">
                   Aegis Test · Proyector de Aula
                 </span>
-                <span className="text-slate-300 font-semibold text-sm">
+                <span className="text-ink font-bold text-sm sm:text-base">
                   {dashboard.course?.courseName} ({dashboard.course?.levelName || dashboard.course?.levelCode || 'Nivel'}) · {dashboard.examTemplate?.title}
                 </span>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
                 {/* Previous Block Button */}
                 <button
                   type="button"
                   onClick={handlePreviousBlock}
                   disabled={advancing || currentBlock <= 1}
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-btn inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+                  className="px-3.5 py-2 bg-paper border border-rule hover:border-rule-strong text-ink text-xs font-semibold rounded-btn inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow-xs transition-colors"
                 >
                   <Rewind className="w-4 h-4" />
                   <span>Bloque Anterior</span>
@@ -915,7 +932,7 @@ export default function TeacherSessionMonitorPage() {
                           }
                     }
                     disabled={advancing}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-btn inline-flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-50"
+                    className="px-4 py-2 bg-accent text-accent-ink hover:bg-accent-hover text-xs font-bold rounded-btn inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 transition-colors"
                   >
                     <FastForward className="w-4 h-4" />
                     <span>
@@ -926,142 +943,142 @@ export default function TeacherSessionMonitorPage() {
                   </button>
                 )}
 
+                {/* Exit Fullscreen Button */}
                 <button
                   type="button"
                   onClick={() => setIsProjectorFullscreen(false)}
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-btn inline-flex items-center gap-1 cursor-pointer"
+                  className="px-3.5 py-2 bg-paper-muted hover:bg-paper-muted/80 text-ink text-xs font-semibold rounded-btn inline-flex items-center gap-1.5 cursor-pointer border border-rule transition-colors"
                   title="Cerrar pantalla completa (Esc)"
                 >
                   <Minimize2 className="w-4 h-4" />
                   <span>Salir (Esc)</span>
                 </button>
               </div>
+            </header>
+
+            {/* Subheader / Block Banner */}
+            <div className="max-w-5xl mx-auto w-full px-6 sm:px-10 pt-8 pb-4 border-b border-rule flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-accent font-extrabold font-mono text-2xl sm:text-3xl">
+                  Bloque {currentBlock} de {totalBlocks}
+                </span>
+                <span className="text-ink-muted text-sm ml-3 font-medium">
+                  (Puntos {blockStart + 1} a {blockEnd} de {totalQuestions})
+                </span>
+              </div>
+              <div className="text-ink-muted text-xs font-mono bg-paper-muted px-3 py-1 rounded-btn border border-rule self-start sm:self-auto">
+                Usa las teclas [←] y [→] para avanzar o retroceder de bloque
+              </div>
             </div>
 
-            {/* Large Screen Projected 5 Points */}
-            <div className="flex-1 max-w-5xl mx-auto w-full py-8 space-y-8 flex flex-col justify-center">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div>
-                  <span className="text-blue-400 font-bold font-mono text-xl sm:text-2xl">
-                    Bloque {currentBlock} de {totalBlocks}
-                  </span>
-                  <span className="text-slate-400 text-sm ml-2">
-                    (Puntos {blockStart + 1} a {blockEnd} de {totalQuestions})
-                  </span>
-                </div>
-                <div className="text-slate-400 text-xs font-mono">
-                  Usa las flechas [←] [→] del teclado para avanzar o retroceder de bloque
-                </div>
-              </div>
-
-              {/* Questions displayed with huge typography */}
-              <div className="space-y-8">
-                {currentBlockQuestions.map((q, idx) => {
-                  const globalNum = blockStart + idx + 1;
-                  return (
-                    <div
-                      key={q.id}
-                      className="p-6 sm:p-8 bg-slate-900 border border-slate-800 rounded-xl space-y-4 shadow-xl"
-                    >
-                      <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                        <div className="flex items-center gap-3">
-                          <span className="px-3.5 py-1 bg-blue-900/80 text-blue-300 font-mono font-bold text-base rounded">
-                            PUNTO #{globalNum}
-                          </span>
-                          <span className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                            {q.type === 'ICFES_MULTIPLE_CHOICE'
-                              ? 'Opción Múltiple (ICFES)'
-                              : q.type === 'SENTENCE_SCRAMBLE'
-                              ? 'Ordenar Oración'
-                              : q.type === 'FILL_IN_BLANK'
-                              ? 'Completar Espacios'
-                              : 'Completar Oración'}
-                          </span>
-                        </div>
-                        <span className="text-xs text-slate-400 font-mono">
-                          {q.points} {Number(q.points) === 1 ? 'punto' : 'puntos'}
+            {/* Questions List (Light Mode with High Contrast Typography) */}
+            <main className="flex-1 max-w-5xl mx-auto w-full px-6 sm:px-10 py-8 space-y-6">
+              {currentBlockQuestions.map((q, idx) => {
+                const globalNum = blockStart + idx + 1;
+                return (
+                  <div
+                    key={q.id}
+                    className="p-6 sm:p-8 bg-paper-card border border-rule rounded-card shadow-xs space-y-4"
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-rule/70 pb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="px-3.5 py-1 bg-accent text-accent-ink font-mono font-bold text-base rounded shadow-xs">
+                          PUNTO #{globalNum}
+                        </span>
+                        <span className="text-xs text-ink-muted uppercase tracking-wider font-bold">
+                          {q.type === 'ICFES_MULTIPLE_CHOICE'
+                            ? 'Opción Múltiple (ICFES)'
+                            : q.type === 'SENTENCE_SCRAMBLE'
+                            ? 'Ordenar Oración'
+                            : q.type === 'FILL_IN_BLANK'
+                            ? 'Completar Espacios'
+                            : 'Completar Oración'}
                         </span>
                       </div>
-
-                      {(q.contextText || q.context) && (
-                        <div className="p-4 bg-slate-950 border-l-4 border-blue-500 rounded text-slate-300 font-serif italic text-base leading-relaxed">
-                          {q.contextText || q.context}
-                        </div>
-                      )}
-
-                      <h2 className="text-xl sm:text-2xl font-bold text-white leading-relaxed">
-                        {q.prompt}
-                      </h2>
-
-                      {q.type === 'ICFES_MULTIPLE_CHOICE' && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                          {q.options?.map((opt, oIdx) => {
-                            const letter = String.fromCharCode(65 + oIdx);
-                            return (
-                              <div
-                                key={opt.id}
-                                className="p-4 bg-slate-950 border border-slate-800 rounded-lg flex items-center gap-4 text-base"
-                              >
-                                <span className="w-9 h-9 rounded-full bg-blue-600/30 text-blue-300 font-bold text-base flex items-center justify-center shrink-0">
-                                  {letter}
-                                </span>
-                                <span className="text-slate-100 font-medium">
-                                  {opt.content}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {q.type === 'SENTENCE_SCRAMBLE' && (
-                        <div className="space-y-2 pt-2">
-                          <p className="text-xs text-slate-400 font-semibold">
-                            Palabras para ordenar la oración:
-                          </p>
-                          <div className="flex flex-wrap gap-3">
-                            {q.options?.map((opt) => (
-                              <span
-                                key={opt.id}
-                                className="px-5 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-base font-bold text-slate-200 shadow-sm"
-                              >
-                                {opt.content}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {q.type === 'FILL_IN_BLANK' && (
-                        <div className="space-y-2 pt-2">
-                          <p className="text-xs text-slate-400 font-semibold">
-                            Opciones para los espacios:
-                          </p>
-                          <div className="flex flex-wrap gap-2.5">
-                            {q.options?.map((opt) => (
-                              <span
-                                key={opt.id}
-                                className="px-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm font-semibold text-slate-200"
-                              >
-                                {opt.blankId ? `[Espacio #${opt.blankId}]: ` : ''}
-                                {opt.content}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {q.type === 'SENTENCE_COMPLETION' && (
-                        <div className="p-4 bg-slate-950 rounded-lg border border-dashed border-slate-800 text-sm text-slate-400 font-mono">
-                          Espacio de respuesta escrita: [ __________________________________ ]
-                        </div>
-                      )}
+                      <span className="text-xs text-ink-muted font-mono font-semibold bg-paper-muted px-2.5 py-1 rounded border border-rule">
+                        {q.points} {Number(q.points) === 1 ? 'punto' : 'puntos'}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+
+                    {(q.contextText || q.context) && (
+                      <div className="p-4 bg-paper-muted border-l-4 border-accent rounded-r text-ink font-serif italic text-base leading-relaxed">
+                        {q.contextText || q.context}
+                      </div>
+                    )}
+
+                    <h2 className="text-xl sm:text-2xl font-bold text-ink leading-relaxed">
+                      {q.prompt}
+                    </h2>
+
+                    {q.type === 'ICFES_MULTIPLE_CHOICE' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
+                        {q.options?.map((opt, oIdx) => {
+                          const letter = String.fromCharCode(65 + oIdx);
+                          return (
+                            <div
+                              key={opt.id}
+                              className="p-4 bg-paper border border-rule rounded-card flex items-center gap-3.5 text-base text-ink shadow-xs"
+                            >
+                              <span className="w-9 h-9 rounded-full bg-accent-soft text-accent font-bold text-base flex items-center justify-center shrink-0">
+                                {letter}
+                              </span>
+                              <span className="font-medium leading-snug">
+                                {opt.content}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {q.type === 'SENTENCE_SCRAMBLE' && (
+                      <div className="space-y-2 pt-2">
+                        <p className="text-xs text-ink-muted font-semibold">
+                          Palabras para ordenar la oración:
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                          {q.options?.map((opt) => (
+                            <span
+                              key={opt.id}
+                              className="px-5 py-2.5 bg-paper border border-rule rounded-card text-base font-bold text-ink shadow-xs"
+                            >
+                              {opt.content}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {q.type === 'FILL_IN_BLANK' && (
+                      <div className="space-y-2 pt-2">
+                        <p className="text-xs text-ink-muted font-semibold">
+                          Opciones para los espacios:
+                        </p>
+                        <div className="flex flex-wrap gap-2.5">
+                          {q.options?.map((opt) => (
+                            <span
+                              key={opt.id}
+                              className="px-4 py-2 bg-paper border border-rule rounded-btn text-sm font-semibold text-ink"
+                            >
+                              {opt.blankId ? `[Espacio #${opt.blankId}]: ` : ''}
+                              {opt.content}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {q.type === 'SENTENCE_COMPLETION' && (
+                      <div className="p-4 bg-paper-muted rounded-card border border-dashed border-rule text-sm text-ink-muted font-mono">
+                        Espacio de respuesta escrita: [ __________________________________ ]
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </main>
+          </div>,
+          document.body,
         )}
       </div>
     </RoleGuard>
