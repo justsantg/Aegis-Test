@@ -8,7 +8,7 @@ import {
   StudentAcademicRecordResponse,
   PhaseRecord,
   AuthUser,
-} from '@/lib/api';
+} from '../../lib/api';
 import {
   GraduationCap,
   Award,

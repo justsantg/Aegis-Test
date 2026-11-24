@@ -106,6 +106,7 @@ export interface Question {
   type: 'ICFES_MULTIPLE_CHOICE' | 'SENTENCE_SCRAMBLE' | 'FILL_IN_BLANK' | 'SENTENCE_COMPLETION';
   prompt: string;
   contextText?: string | null;
+  context?: string | null;
   points: number;
   blockNumber: number;
   orderIndex?: number;
@@ -157,6 +158,8 @@ export interface AttendeeMonitorData {
   focusLossCount?: number;
   startedAt?: string | null;
   submittedAt?: string | null;
+  answeredInCurrentBlock?: number;
+  isCurrentBlockReady?: boolean;
 }
 
 export interface SecurityIncident {
@@ -176,16 +179,32 @@ export interface MonitorDashboardResponse {
   mode: 'FREE_PACE' | 'SYNC_BLOCKS' | 'PAPER_OMR';
   status: 'IN_PROGRESS' | 'FINISHED' | 'CANCELLED';
   currentBlock: number;
+  totalBlocks?: number;
   startedAt: string;
+  course?: {
+    id: string;
+    courseName: string;
+    levelName?: string;
+    levelCode?: string;
+  };
   summary: {
     total: number;
     present: number;
     pendingOrAbsent: number;
+    blockReadyCount?: number;
     totalInfractions?: number;
     studentsWithInfractions?: number;
   };
   attendees: AttendeeMonitorData[];
   securityIncidents?: SecurityIncident[];
+  examTemplate?: {
+    id: string;
+    title: string;
+    examType?: string;
+    durationMinutes?: number;
+    totalQuestions?: number;
+  };
+  questions?: Question[];
 }
 
 export interface SubmitResultResponse {
@@ -560,6 +579,19 @@ export const api = {
     });
   },
 
+  async previousBlock(sessionId: string) {
+    return request<any>(`/sessions/${sessionId}/previous-block`, {
+      method: 'POST',
+    });
+  },
+
+  async setBlock(sessionId: string, blockNumber: number) {
+    return request<any>(`/sessions/${sessionId}/set-block`, {
+      method: 'POST',
+      body: JSON.stringify({ blockNumber }),
+    });
+  },
+
   async recordInfraction(
     sessionId: string,
     studentId: number,
@@ -570,6 +602,22 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify({ studentId, ...payload }),
+      },
+    );
+  },
+
+  async saveBlockAnswers(
+    sessionId: string,
+    payload: {
+      studentId: number;
+      answers: { questionId: string; response: any }[];
+    },
+  ) {
+    return request<{ success: boolean; savedCount: number; currentBlock: number }>(
+      `/sessions/${sessionId}/save-block-answers`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
       },
     );
   },

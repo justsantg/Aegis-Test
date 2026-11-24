@@ -68,6 +68,19 @@ export class ExamSessionsController {
     return this.sessionsService.advanceBlock(id);
   }
 
+  @Post(':id/previous-block')
+  async previousBlock(@Param('id') id: string) {
+    return this.sessionsService.previousBlock(id);
+  }
+
+  @Post(':id/set-block')
+  async setBlock(
+    @Param('id') id: string,
+    @Body() dto: { blockNumber: number },
+  ) {
+    return this.sessionsService.setBlock(id, Number(dto.blockNumber));
+  }
+
   @Post(':id/infraction')
   async recordInfraction(
     @Param('id') id: string,
@@ -79,6 +92,14 @@ export class ExamSessionsController {
       dto.incidentType,
       dto.details,
     );
+  }
+
+  @Post(':id/save-block-answers')
+  async saveBlockAnswers(
+    @Param('id') id: string,
+    @Body() dto: SubmitExamDto,
+  ) {
+    return this.sessionsService.saveBlockAnswers(sessionIdClean(id), dto);
   }
 
   @Post(':id/submit')

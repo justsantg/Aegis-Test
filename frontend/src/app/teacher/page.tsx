@@ -1095,7 +1095,7 @@ export default function TeacherDashboardPage() {
                       >
                         <div className="font-bold mb-0.5">Bloques Sincronizados</div>
                         <div className="text-[10px] text-ink-muted">
-                          Pantalla grupal (bloques de 5 preguntas)
+                          Proyección directa en pantalla (5 puntos por bloque, sin PIN)
                         </div>
                       </button>
                     </div>
@@ -1119,6 +1119,11 @@ export default function TeacherDashboardPage() {
                         <>
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           <span>Abriendo sesión...</span>
+                        </>
+                      ) : selectedMode === 'SYNC_BLOCKS' ? (
+                        <>
+                          <Play className="w-3.5 h-3.5" />
+                          <span>Iniciar y Proyectar Examen</span>
                         </>
                       ) : (
                         <>

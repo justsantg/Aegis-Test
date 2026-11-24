@@ -26,6 +26,7 @@ import {
 import { EnrollmentStatusEnum } from '../courses/courses.enum';
 import { ExamsService } from '../exams/exams.service';
 import { QuestionTypeEnum } from '../exams/exams.enum';
+import { QuestionEntity } from '../exams/infrastructure/persistence/relational/entities/question.entity';
 
 @Injectable()
 export class ExamSessionsService {
@@ -234,7 +235,43 @@ export class ExamSessionsService {
   }
 
   async getMonitorDashboard(sessionId: string) {
-    const session = await this.findOne(sessionId);
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+      relations: [
+        'course',
+        'course.level',
+        'examTemplate',
+        'teacher',
+        'attendees',
+        'attendees.student',
+        'attendees.answers',
+        'attendees.answers.question',
+      ],
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Session with id ${sessionId} not found`);
+    }
+
+    const examQuestions = await this.examsService.getExamQuestions(
+      session.examTemplate.id,
+      false, // Teachers can view question options for projection
+    );
+
+    const totalQuestions = examQuestions.length;
+    const blockSize = 5;
+    const totalBlocks = Math.max(1, Math.ceil(totalQuestions / blockSize));
+    const currentBlock = Math.min(
+      Math.max(1, session.currentBlock || 1),
+      totalBlocks,
+    );
+
+    const blockStart = (currentBlock - 1) * blockSize;
+    const blockEnd = Math.min(blockStart + blockSize, totalQuestions);
+    const currentBlockQuestions = examQuestions.slice(blockStart, blockEnd);
+    const currentBlockQuestionIds = new Set(
+      currentBlockQuestions.map((q) => q.id),
+    );
 
     const attendeesData = session.attendees.map((attendee) => {
       const student = attendee.student;
@@ -263,6 +300,15 @@ export class ExamSessionsService {
         whatsappLink = `https://wa.me/${cleanPhone}?text=${message}`;
       }
 
+      const attendeeAnswers = attendee.answers || [];
+      const answeredInCurrentBlock = attendeeAnswers.filter((ans) =>
+        currentBlockQuestionIds.has(ans.question?.id),
+      ).length;
+
+      const isCurrentBlockReady =
+        currentBlockQuestions.length > 0 &&
+        answeredInCurrentBlock >= currentBlockQuestions.length;
+
       return {
         attendeeId: attendee.id,
         studentId: student.id,
@@ -277,6 +323,8 @@ export class ExamSessionsService {
         focusLossCount: attendee.focusLossCount || 0,
         startedAt: attendee.startedAt,
         submittedAt: attendee.submittedAt,
+        answeredInCurrentBlock,
+        isCurrentBlockReady,
       };
     });
 
@@ -291,6 +339,12 @@ export class ExamSessionsService {
         (a) =>
           a.attendanceStatus === AttendanceStatusEnum.PENDING ||
           a.attendanceStatus === AttendanceStatusEnum.ABSENT,
+      ).length,
+      blockReadyCount: attendeesData.filter(
+        (a) =>
+          a.isCurrentBlockReady &&
+          (a.attendanceStatus === AttendanceStatusEnum.IN_PROGRESS ||
+            a.attendanceStatus === AttendanceStatusEnum.COMPLETED),
       ).length,
       totalInfractions: attendeesData.reduce(
         (acc, a) => acc + (a.focusLossCount || 0),
@@ -324,16 +378,38 @@ export class ExamSessionsService {
       sessionPin: session.sessionPin,
       mode: session.mode,
       status: session.status,
-      currentBlock: session.currentBlock,
+      currentBlock,
+      totalBlocks,
       startedAt: session.startedAt,
+      course: {
+        id: session.course?.id,
+        courseName: session.course?.courseName,
+        levelName: session.course?.level?.name,
+        levelCode: session.course?.level?.code,
+      },
       summary,
       attendees: attendeesData,
       securityIncidents,
+      examTemplate: {
+        id: session.examTemplate.id,
+        title: session.examTemplate.title,
+        examType: session.examTemplate.examType,
+        durationMinutes: session.examTemplate.durationMinutes,
+        totalQuestions,
+      },
+      questions: examQuestions,
     };
   }
 
   async advanceBlock(sessionId: string): Promise<ExamSessionEntity> {
-    const session = await this.findOne(sessionId);
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+      relations: ['examTemplate'],
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Session with id ${sessionId} not found`);
+    }
 
     if (session.mode !== SessionModeEnum.SYNC_BLOCKS) {
       throw new BadRequestException(
@@ -341,13 +417,67 @@ export class ExamSessionsService {
       );
     }
 
-    if (session.currentBlock >= 6) {
+    const totalQuestions = session.examTemplate?.totalQuestions || 30;
+    const totalBlocks = Math.max(1, Math.ceil(totalQuestions / 5));
+
+    if (session.currentBlock >= totalBlocks) {
       throw new BadRequestException(
-        'Ya se ha alcanzado el último bloque (Bloque 6)',
+        `Ya se ha alcanzado el último bloque (Bloque ${totalBlocks})`,
       );
     }
 
     session.currentBlock += 1;
+    return this.sessionRepository.save(session);
+  }
+
+  async previousBlock(sessionId: string): Promise<ExamSessionEntity> {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+      relations: ['examTemplate'],
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Session with id ${sessionId} not found`);
+    }
+
+    if (session.mode !== SessionModeEnum.SYNC_BLOCKS) {
+      throw new BadRequestException(
+        'Solo se puede cambiar de bloque en el modo Bloques Sincronizados (SYNC_BLOCKS)',
+      );
+    }
+
+    if (session.currentBlock <= 1) {
+      throw new BadRequestException('Ya estás en el primer bloque');
+    }
+
+    session.currentBlock -= 1;
+    return this.sessionRepository.save(session);
+  }
+
+  async setBlock(
+    sessionId: string,
+    blockNumber: number,
+  ): Promise<ExamSessionEntity> {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+      relations: ['examTemplate'],
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Session with id ${sessionId} not found`);
+    }
+
+    if (session.mode !== SessionModeEnum.SYNC_BLOCKS) {
+      throw new BadRequestException(
+        'Solo se puede cambiar de bloque en el modo Bloques Sincronizados (SYNC_BLOCKS)',
+      );
+    }
+
+    const totalQuestions = session.examTemplate?.totalQuestions || 30;
+    const totalBlocks = Math.max(1, Math.ceil(totalQuestions / 5));
+    const targetBlock = Math.min(Math.max(1, blockNumber), totalBlocks);
+
+    session.currentBlock = targetBlock;
     return this.sessionRepository.save(session);
   }
 
@@ -422,108 +552,48 @@ export class ExamSessionsService {
     );
     const questionsMap = new Map(template.questions.map((q) => [q.id, q]));
 
-    let totalScore = 0;
-    const answerEntities: StudentAnswerEntity[] = [];
-
     for (const submitted of dto.answers) {
       const question = questionsMap.get(submitted.questionId);
       if (!question) continue;
 
-      let isCorrect = false;
-      const resp = submitted.response;
-
-      switch (question.type) {
-        case QuestionTypeEnum.ICFES_MULTIPLE_CHOICE: {
-          // resp es el optionId elegido
-          const chosenOpt = question.options.find((o) => o.id === resp);
-          isCorrect = chosenOpt ? chosenOpt.isCorrect === true : false;
-          break;
-        }
-
-        case QuestionTypeEnum.SENTENCE_SCRAMBLE: {
-          // resp es un array ordenado de optionIds: [id1, id2, ...] o palabras
-          if (Array.isArray(resp)) {
-            // Verificar si cada elemento coincide con correctPosition
-            const sortedOptions = [...question.options].sort(
-              (a, b) => (a.correctPosition ?? 0) - (b.correctPosition ?? 0),
-            );
-            const correctIds = sortedOptions.map((o) => o.id);
-            const correctContents = sortedOptions.map((o) =>
-              o.content.trim().toLowerCase(),
-            );
-
-            const studentMatchesIds =
-              JSON.stringify(resp) === JSON.stringify(correctIds);
-            const studentMatchesContents =
-              JSON.stringify(
-                resp.map((r: string) => String(r).trim().toLowerCase()),
-              ) === JSON.stringify(correctContents);
-
-            isCorrect = studentMatchesIds || studentMatchesContents;
-          }
-          break;
-        }
-
-        case QuestionTypeEnum.FILL_IN_BLANK: {
-          // resp es un objeto mapa { "1": "optionId1", "2": "optionId2" }
-          if (typeof resp === 'object' && resp !== null) {
-            const blankOptions = question.options.filter((o) => o.blankId);
-            const blanks = Array.from(
-              new Set(blankOptions.map((o) => o.blankId)),
-            );
-
-            let allBlanksCorrect = true;
-            for (const bId of blanks) {
-              const studentChoice = resp[String(bId)];
-              const correctForBlank = question.options.find(
-                (o) => o.blankId === bId && o.isCorrect,
-              );
-
-              if (
-                !correctForBlank ||
-                (studentChoice !== correctForBlank.id &&
-                  studentChoice !== correctForBlank.content)
-              ) {
-                allBlanksCorrect = false;
-                break;
-              }
-            }
-            isCorrect = allBlanksCorrect;
-          }
-          break;
-        }
-
-        case QuestionTypeEnum.SENTENCE_COMPLETION: {
-          // resp es texto escrito por el alumno o palabra seleccionada del recuadro
-          if (typeof resp === 'string') {
-            const cleanResp = resp.trim().toLowerCase();
-            const correctOptions = question.options.filter((o) => o.isCorrect);
-            isCorrect = correctOptions.some(
-              (o) =>
-                o.content.trim().toLowerCase() === cleanResp ||
-                o.id === resp.trim(),
-            );
-          }
-          break;
-        }
-      }
-
+      const isCorrect = this.evaluateAnswer(question, submitted.response);
       const pointsEarned = isCorrect ? Number(question.points) : 0.0;
-      totalScore += pointsEarned;
 
-      answerEntities.push(
-        this.answerRepository.create({
+      const existing = attendee.answers?.find(
+        (a) => a.question?.id === question.id,
+      );
+
+      if (existing) {
+        existing.studentResponse =
+          typeof submitted.response === 'object'
+            ? JSON.stringify(submitted.response)
+            : String(submitted.response);
+        existing.isCorrect = isCorrect;
+        existing.scoreEarned = pointsEarned;
+        await this.answerRepository.save(existing);
+      } else {
+        const studentAnswer = this.answerRepository.create({
           sessionAttendee: attendee,
           question,
           studentResponse:
-            typeof resp === 'object' ? JSON.stringify(resp) : String(resp),
+            typeof submitted.response === 'object'
+              ? JSON.stringify(submitted.response)
+              : String(submitted.response),
           isCorrect,
           scoreEarned: pointsEarned,
-        }),
-      );
+        });
+        await this.answerRepository.save(studentAnswer);
+      }
     }
 
-    await this.answerRepository.save(answerEntities);
+    // Recalcular totalScore considerando todas las respuestas enviadas para este attendee
+    const allAnswers = await this.answerRepository.find({
+      where: { sessionAttendee: { id: attendee.id } },
+    });
+    const totalScore = allAnswers.reduce(
+      (acc, a) => acc + Number(a.scoreEarned || 0),
+      0,
+    );
 
     attendee.totalScore = totalScore;
     attendee.attendanceStatus = AttendanceStatusEnum.COMPLETED;
@@ -534,7 +604,151 @@ export class ExamSessionsService {
       message: 'Examen calificado y enviado exitosamente',
       studentId: dto.studentId,
       totalScore,
-      totalQuestionsEvaluated: answerEntities.length,
+      totalQuestionsEvaluated: allAnswers.length,
+    };
+  }
+
+  evaluateAnswer(question: QuestionEntity, resp: any): boolean {
+    if (resp === undefined || resp === null) return false;
+
+    switch (question.type) {
+      case QuestionTypeEnum.ICFES_MULTIPLE_CHOICE: {
+        const chosenOpt = question.options?.find((o) => o.id === resp);
+        return chosenOpt ? chosenOpt.isCorrect === true : false;
+      }
+
+      case QuestionTypeEnum.SENTENCE_SCRAMBLE: {
+        if (Array.isArray(resp)) {
+          const sortedOptions = [...(question.options || [])].sort(
+            (a, b) => (a.correctPosition ?? 0) - (b.correctPosition ?? 0),
+          );
+          const correctIds = sortedOptions.map((o) => o.id);
+          const correctContents = sortedOptions.map((o) =>
+            o.content.trim().toLowerCase(),
+          );
+
+          const studentMatchesIds =
+            JSON.stringify(resp) === JSON.stringify(correctIds);
+          const studentMatchesContents =
+            JSON.stringify(
+              resp.map((r: string) => String(r).trim().toLowerCase()),
+            ) === JSON.stringify(correctContents);
+
+          return studentMatchesIds || studentMatchesContents;
+        }
+        return false;
+      }
+
+      case QuestionTypeEnum.FILL_IN_BLANK: {
+        if (typeof resp === 'object' && resp !== null) {
+          const blankOptions = (question.options || []).filter((o) => o.blankId);
+          const blanks = Array.from(
+            new Set(blankOptions.map((o) => o.blankId)),
+          );
+
+          let allBlanksCorrect = true;
+          for (const bId of blanks) {
+            const studentChoice = resp[String(bId)];
+            const correctForBlank = question.options?.find(
+              (o) => o.blankId === bId && o.isCorrect,
+            );
+
+            if (
+              !correctForBlank ||
+              (studentChoice !== correctForBlank.id &&
+                studentChoice !== correctForBlank.content)
+            ) {
+              allBlanksCorrect = false;
+              break;
+            }
+          }
+          return allBlanksCorrect;
+        }
+        return false;
+      }
+
+      case QuestionTypeEnum.SENTENCE_COMPLETION: {
+        if (typeof resp === 'string') {
+          const cleanResp = resp.trim().toLowerCase();
+          const correctOptions = (question.options || []).filter((o) => o.isCorrect);
+          return correctOptions.some(
+            (o) =>
+              o.content.trim().toLowerCase() === cleanResp ||
+              o.id === resp.trim(),
+          );
+        }
+        return false;
+      }
+
+      default:
+        return false;
+    }
+  }
+
+  async saveBlockAnswers(sessionId: string, dto: SubmitExamDto) {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+      relations: ['examTemplate'],
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Session with id ${sessionId} not found`);
+    }
+
+    const attendee = await this.attendeeRepository.findOne({
+      where: { session: { id: sessionId }, student: { id: dto.studentId } },
+      relations: ['answers', 'answers.question'],
+    });
+
+    if (!attendee) {
+      throw new NotFoundException(
+        `Attendee record not found for student in this session`,
+      );
+    }
+
+    const template = await this.examsService.findOneTemplate(
+      session.examTemplate.id,
+    );
+    const questionsMap = new Map(template.questions.map((q) => [q.id, q]));
+
+    for (const submitted of dto.answers) {
+      const question = questionsMap.get(submitted.questionId);
+      if (!question) continue;
+
+      const isCorrect = this.evaluateAnswer(question, submitted.response);
+      const pointsEarned = isCorrect ? Number(question.points) : 0.0;
+
+      const existing = attendee.answers?.find(
+        (a) => a.question?.id === question.id,
+      );
+
+      if (existing) {
+        existing.studentResponse =
+          typeof submitted.response === 'object'
+            ? JSON.stringify(submitted.response)
+            : String(submitted.response);
+        existing.isCorrect = isCorrect;
+        existing.scoreEarned = pointsEarned;
+        await this.answerRepository.save(existing);
+      } else {
+        const studentAnswer = this.answerRepository.create({
+          sessionAttendee: attendee,
+          question,
+          studentResponse:
+            typeof submitted.response === 'object'
+              ? JSON.stringify(submitted.response)
+              : String(submitted.response),
+          isCorrect,
+          scoreEarned: pointsEarned,
+        });
+        await this.answerRepository.save(studentAnswer);
+      }
+    }
+
+    return {
+      success: true,
+      savedCount: dto.answers.length,
+      currentBlock: session.currentBlock,
     };
   }
 
